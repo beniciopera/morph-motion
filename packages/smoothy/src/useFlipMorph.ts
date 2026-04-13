@@ -172,23 +172,19 @@ function getLayoutReserveTargets(
   const reserve = new Set<HTMLElement>();
 
   revealTargets.forEach((target) => {
+    reserve.add(target);
     let parent = target.parentElement;
 
     while (parent && parent !== wrapper) {
       if (getEffectiveSharedKey(parent)) break;
-      if (parent.hasAttribute("data-smoothy-ignore-reveal")) break;
       if (parent.tagName === "SCRIPT" || parent.tagName === "STYLE") break;
-      if (
-        parent.querySelector(`[data-smoothy-id], [${AUTO_SHARED_KEY_ATTR}]`) !==
-        null
-      ) {
-        break;
-      }
 
       reserve.add(parent);
       parent = parent.parentElement;
     }
   });
+
+  reserve.add(wrapper);
 
   return Array.from(reserve);
 }
@@ -362,7 +358,7 @@ export function useFlipMorph(
         if (layoutReserveTargetsRef.current.length === 0) return;
 
         gsap.set(layoutReserveTargetsRef.current, {
-          clearProps: "minHeight",
+          clearProps: "minHeight,minWidth",
         });
         layoutReserveTargetsRef.current = [];
       };
