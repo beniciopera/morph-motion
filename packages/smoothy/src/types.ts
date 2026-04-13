@@ -7,6 +7,7 @@ export type SmoothyCardState = "a" | "b";
 export type SmoothyCardConfig = {
   duration?: number;
   ease?: string | EaseLike;
+  revealShift?: number;
   onStart?: () => void;
   onComplete?: () => void;
 };

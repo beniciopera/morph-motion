@@ -97,6 +97,7 @@ Optional advanced markers:
 - `data-all-smoothy-id`: mark one element and its full subtree as shared.
 - `data-smoothy-reveal`: force an element to participate in progressive reveal.
 - `data-smoothy-ignore-reveal`: exclude an element from progressive reveal.
+- `data-smoothy-reveal-delay`: optional delay in seconds from the start of the reveal phase for non-shared elements. If omitted, smoothy uses the automatic right-to-left sweep.
 
 ## Config
 
@@ -104,6 +105,7 @@ Optional advanced markers:
 type SmoothyCardConfig = {
   duration?: number;
   ease?: string | EaseFunction;
+  revealShift?: number;
   onStart?: () => void;
   onComplete?: () => void;
 };
@@ -114,11 +116,21 @@ type SmoothyCardConfig = {
 ```tsx
 <Smoothy.Card
   state={isExpanded ? "b" : "a"}
-  config={{ duration: 0.6, ease: "power2.inOut" }}
+  config={{ duration: 0.6, ease: "power2.inOut", revealShift: 2.5 }}
 >
   {isExpanded ? <ExpandedLayout /> : <CompactLayout />}
 </Smoothy.Card>
 ```
+
+Custom reveal delay example:
+
+```tsx
+<p data-smoothy-reveal-delay="0">Appears at the start of the reveal phase</p>
+<p data-smoothy-reveal-delay="0.1">Appears 100ms later</p>
+<p data-smoothy-reveal-delay="0.5">Appears 500ms later</p>
+```
+
+If `data-smoothy-reveal-delay` is missing or invalid, smoothy falls back to the automatic right-to-left reveal order. Negative values are clamped to `0`.
 
 ## Scope Limits
 

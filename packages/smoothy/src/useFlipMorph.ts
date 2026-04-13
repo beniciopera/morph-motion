@@ -18,10 +18,12 @@ type SharedEntry = {
 type RevealCue = {
   element: HTMLElement;
   threshold: number;
+  explicitDelay: number | null;
 };
 
 const AUTO_SHARED_KEY_ATTR = "data-smoothy-auto-id";
 const MANAGED_FLIP_ATTR = "data-smoothy-managed-flip";
+const REVEAL_DELAY_ATTR = "data-smoothy-reveal-delay";
 
 function getEffectiveSharedKey(el: HTMLElement): string | null {
   const explicit = el.dataset.smoothyId?.trim();
@@ -267,6 +269,14 @@ function getSingleLineSharedTextTargets(shared: HTMLElement[]): HTMLElement[] {
   });
 }
 
+function getRevealTextTargets(targets: HTMLElement[]): HTMLElement[] {
+  return targets.filter((el) => {
+    if (!isTextSharedElement(el)) return false;
+    if (el.textContent?.trim().length === 0) return false;
+    return true;
+  });
+}
+
 function collectSharedIds(entries: SharedEntry[]): Set<string> {
   return new Set(entries.map(({ key }) => key));
 }
@@ -298,6 +308,16 @@ function clamp01(value: number): number {
   return value;
 }
 
+function parseRevealDelay(element: HTMLElement): number | null {
+  const raw = element.getAttribute(REVEAL_DELAY_ATTR)?.trim();
+  if (!raw) return null;
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return null;
+
+  return Math.max(parsed, 0);
+}
+
 function getRevealCues(
   wrapper: HTMLDivElement | null,
   targets: HTMLElement[],
@@ -307,19 +327,14 @@ function getRevealCues(
   const wrapperRect = wrapper.getBoundingClientRect();
   const width = Math.max(wrapperRect.width, 1);
 
-  return targets
-    .map((element) => {
-      const rect = element.getBoundingClientRect();
-      const centerX = rect.left + rect.width / 2;
-      const nx = clamp01((centerX - wrapperRect.left) / width);
+  return targets.map((element) => {
+    const rect = element.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const nx = clamp01((centerX - wrapperRect.left) / width);
+    const threshold = 1 - nx;
 
-      // Keep a deterministic reveal sweep from right to left.
-      return {
-        element,
-        threshold: 1 - nx,
-      };
-    })
-    .sort((a, b) => a.threshold - b.threshold);
+    return { element, threshold, explicitDelay: parseRevealDelay(element) };
+  });
 }
 
 export function useFlipMorph(
@@ -336,6 +351,8 @@ export function useFlipMorph(
     ids: new Set(),
   });
   const wrapLockTargetsRef = useRef<HTMLElement[]>([]);
+  const revealTextWrapLockTargetsRef = useRef<HTMLElement[]>([]);
+  const revealInlineDisplayLockTargetsRef = useRef<HTMLElement[]>([]);
   const timelineRef = useRef<gsap.core.Timeline | null>(null);
   const leavingClonesRef = useRef<HTMLElement[]>([]);
   const activeLeavingClonesRef = useRef<HTMLElement[]>([]);
@@ -383,6 +400,24 @@ export function useFlipMorph(
         wrapLockTargetsRef.current = [];
       };
 
+      const clearRevealTextWrapLocks = () => {
+        if (revealTextWrapLockTargetsRef.current.length === 0) return;
+
+        gsap.set(revealTextWrapLockTargetsRef.current, {
+          clearProps: "width,minWidth,maxWidth",
+        });
+        revealTextWrapLockTargetsRef.current = [];
+      };
+
+      const clearRevealInlineDisplayLocks = () => {
+        if (revealInlineDisplayLockTargetsRef.current.length === 0) return;
+
+        gsap.set(revealInlineDisplayLockTargetsRef.current, {
+          clearProps: "display",
+        });
+        revealInlineDisplayLockTargetsRef.current = [];
+      };
+
       const captureSnapshot = () => {
         const sharedEntries = getSharedEntries(wrapperRef.current);
         const elements = sharedEntries.map(({ element }) => element);
@@ -406,17 +441,22 @@ export function useFlipMorph(
 
       const duration = config?.duration ?? 0.45;
       const ease = config?.ease ?? "power2.inOut";
-      const revealDelay = Math.min(duration * 0.12, 0.1);
-      const revealWindow = Math.max(duration * 0.74, 0.24);
+      const revealDelayBase = Math.min(duration * 0.12, 0.1);
+      const revealWindowBase = Math.max(duration * 0.74, 0.24);
       const revealDuration = Math.max(duration * 0.8, 0.18);
-      const revealBlurStart = 8;
-      const revealBlurMid = 3;
+      const revealBlurStart = 4;
+      const revealBlurMid = 2;
       const revealOpacityMid = 0.9;
-      const revealShiftStart = 18;
-      const revealShiftMid = 6;
+      const configuredRevealShift = config?.revealShift;
+      const revealShiftStart =
+        typeof configuredRevealShift === "number" &&
+        Number.isFinite(configuredRevealShift)
+          ? Math.max(configuredRevealShift, 0)
+          : 0.6;
+      const revealShiftMid = revealShiftStart * 0.1;
       const hideDuration = Math.max(duration * 0.42, 0.22);
       const hideBlurEnd = 20;
-      const revealPreRoll = Math.min(revealDuration * 0.24, 0.08);
+      const revealPreRollBase = Math.min(revealDuration * 0.24, 0.08);
       const revealEaseStart = "sine.out";
       const revealEaseEnd = "power2.out";
       const hideEase = "power2.in";
@@ -431,6 +471,8 @@ export function useFlipMorph(
 
       if (reduced) {
         clearWrapLocks();
+        clearRevealTextWrapLocks();
+        clearRevealInlineDisplayLocks();
         clearActiveLeavingClones();
         clearLayoutReserves();
 
@@ -456,6 +498,8 @@ export function useFlipMorph(
       // Interruption — kill current timeline and re-snapshot live DOM
       if (timelineRef.current) {
         clearWrapLocks();
+        clearRevealTextWrapLocks();
+        clearRevealInlineDisplayLocks();
         clearActiveLeavingClones();
         clearLayoutReserves();
         timelineRef.current.kill();
@@ -495,6 +539,14 @@ export function useFlipMorph(
       const sharedAfter = sharedAfterEntries.map(({ element }) => element);
       const sharedTextAfter = sharedAfter.filter(isTextSharedElement);
       const sharedTransformClearAfter = sharedAfter;
+      const hasSharedMorphTargets = sharedAfter.length > 0;
+      const revealDelay = hasSharedMorphTargets
+        ? duration + Math.min(duration * 0.04, 0.03)
+        : revealDelayBase;
+      const revealWindow = hasSharedMorphTargets
+        ? Math.max(duration * 0.2, 0.12)
+        : revealWindowBase;
+      const revealPreRoll = hasSharedMorphTargets ? 0 : revealPreRollBase;
       const revealTargets = getRevealTargets(wrapperRef.current);
       const layoutReserveTargets = getLayoutReserveTargets(
         wrapperRef.current,
@@ -514,6 +566,8 @@ export function useFlipMorph(
         revealTargets.length === 0 &&
         leavingClones.length === 0
       ) {
+        clearRevealTextWrapLocks();
+        clearRevealInlineDisplayLocks();
         clearLayoutReserves();
         config?.onStart?.();
         config?.onComplete?.();
@@ -528,6 +582,34 @@ export function useFlipMorph(
       applyLayoutReserves(layoutReserveTargets);
 
       if (revealTargets.length > 0) {
+        const revealInlineDisplayLocks: HTMLElement[] = [];
+        revealTargets.forEach((target) => {
+          const style = window.getComputedStyle(target);
+          if (style.display === "inline") {
+            gsap.set(target, { display: "inline-block" });
+            revealInlineDisplayLocks.push(target);
+          }
+        });
+        revealInlineDisplayLockTargetsRef.current = revealInlineDisplayLocks;
+
+        const revealTextTargets = getRevealTextTargets(revealTargets);
+        const revealTextWrapLocks: HTMLElement[] = [];
+
+        revealTextTargets.forEach((target) => {
+          const rect = target.getBoundingClientRect();
+          if (rect.width <= 0) return;
+
+          const width = `${rect.width}px`;
+          gsap.set(target, {
+            width,
+            minWidth: width,
+            maxWidth: width,
+          });
+          revealTextWrapLocks.push(target);
+        });
+
+        revealTextWrapLockTargetsRef.current = revealTextWrapLocks;
+
         gsap.set(revealTargets, {
           opacity: 0,
           x: revealShiftStart,
@@ -547,6 +629,8 @@ export function useFlipMorph(
         onComplete: () => {
           timelineRef.current = null;
           clearWrapLocks();
+          clearRevealTextWrapLocks();
+          clearRevealInlineDisplayLocks();
           clearActiveLeavingClones();
           clearLayoutReserves();
 
@@ -613,8 +697,11 @@ export function useFlipMorph(
       }
 
       if (revealCues.length > 0) {
-        revealCues.forEach(({ element, threshold }) => {
-          const at = revealDelay + threshold * revealWindow;
+        revealCues.forEach(({ element, threshold, explicitDelay }) => {
+          const at =
+            explicitDelay !== null
+              ? revealDelay + explicitDelay
+              : revealDelay + threshold * revealWindow;
           const startAt = Math.max(0, at - revealPreRoll);
 
           tl.to(
