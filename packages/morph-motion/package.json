@@ -1,8 +1,8 @@
 {
-  "name": "smoothy",
+  "name": "morph-motion",
   "version": "0.1.0",
   "type": "module",
-  "description": "Two-state shadcn Card morphs with shared-element animations via GSAP Flip.",
+  "description": "Two-state card morphs with shared-element animations via GSAP Flip.",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",

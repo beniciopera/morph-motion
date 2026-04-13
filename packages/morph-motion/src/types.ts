@@ -2,9 +2,9 @@ import type { ReactNode } from "react";
 
 type EaseLike = (progress: number) => number;
 
-export type SmoothyCardState = "a" | "b";
+export type MorphMotionCardState = "a" | "b";
 
-export type SmoothyCardConfig = {
+export type MorphMotionCardConfig = {
   duration?: number;
   ease?: string | EaseLike;
   revealShift?: number;
@@ -12,8 +12,8 @@ export type SmoothyCardConfig = {
   onComplete?: () => void;
 };
 
-export type SmoothyCardProps = {
-  state: SmoothyCardState;
-  config?: SmoothyCardConfig | undefined;
+export type MorphMotionCardProps = {
+  state: MorphMotionCardState;
+  config?: MorphMotionCardConfig | undefined;
   children: ReactNode;
 };

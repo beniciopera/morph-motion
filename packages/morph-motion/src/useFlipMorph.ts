@@ -3,7 +3,7 @@ import { useRef, type RefObject } from "react";
 import { useGSAP } from "@gsap/react";
 import { gsap } from "gsap";
 import { Flip } from "gsap/dist/Flip";
-import type { SmoothyCardState, SmoothyCardConfig } from "./types";
+import type { MorphMotionCardState, MorphMotionCardConfig } from "./types";
 
 type SharedSnapshot = {
   state: Flip.FlipState | null;
@@ -21,12 +21,12 @@ type RevealCue = {
   explicitDelay: number | null;
 };
 
-const AUTO_SHARED_KEY_ATTR = "data-smoothy-auto-id";
-const MANAGED_FLIP_ATTR = "data-smoothy-managed-flip";
-const REVEAL_DELAY_ATTR = "data-smoothy-reveal-delay";
+const AUTO_SHARED_KEY_ATTR = "data-morph-auto-id";
+const MANAGED_FLIP_ATTR = "data-morph-managed-flip";
+const REVEAL_DELAY_ATTR = "data-morph-reveal-delay";
 
 function getEffectiveSharedKey(el: HTMLElement): string | null {
-  const explicit = el.dataset.smoothyId?.trim();
+  const explicit = el.dataset.morphId?.trim();
   if (explicit) return explicit;
 
   const auto = el.getAttribute(AUTO_SHARED_KEY_ATTR)?.trim();
@@ -75,9 +75,9 @@ function addAutoSharedEntries(
   const baseCounters = new Map<string, number>();
 
   Array.from(
-    wrapper.querySelectorAll<HTMLElement>("[data-all-smoothy-id]"),
+    wrapper.querySelectorAll<HTMLElement>("[data-morph-all-id]"),
   ).forEach((element) => {
-    const base = element.getAttribute("data-all-smoothy-id")?.trim();
+    const base = element.getAttribute("data-morph-all-id")?.trim();
     if (!base) return;
 
     const instance = baseCounters.get(base) ?? 0;
@@ -86,7 +86,7 @@ function addAutoSharedEntries(
   });
 
   const containers = Array.from(
-    wrapper.querySelectorAll<HTMLElement>("[data-all-smoothy-id]"),
+    wrapper.querySelectorAll<HTMLElement>("[data-morph-all-id]"),
   )
     .map((element) => ({
       element,
@@ -104,7 +104,7 @@ function addAutoSharedEntries(
     if (node.tagName === "SCRIPT" || node.tagName === "STYLE") return;
 
     const key = `all:${base}:${containerInstance}:${path}`;
-    const explicit = node.dataset.smoothyId?.trim();
+    const explicit = node.dataset.morphId?.trim();
     if (!explicit && !sharedByElement.has(node)) {
       sharedByElement.set(node, key);
     }
@@ -123,7 +123,7 @@ function addAutoSharedEntries(
   };
 
   containers.forEach(({ element, containerInstance }) => {
-    const base = element.getAttribute("data-all-smoothy-id")?.trim();
+    const base = element.getAttribute("data-morph-all-id")?.trim();
     if (!base) return;
     visit(element, base, containerInstance, "root");
   });
@@ -136,11 +136,11 @@ function getSharedEntries(wrapper: HTMLDivElement | null): SharedEntry[] {
 
   const sharedByElement = new Map<HTMLElement, string>();
   const explicitElements = Array.from(
-    wrapper.querySelectorAll<HTMLElement>("[data-smoothy-id]"),
+    wrapper.querySelectorAll<HTMLElement>("[data-morph-id]"),
   );
 
   explicitElements.forEach((el) => {
-    const id = el.dataset.smoothyId?.trim();
+    const id = el.dataset.morphId?.trim();
     if (!id) return;
 
     sharedByElement.set(el, id);
@@ -154,7 +154,7 @@ function getSharedEntries(wrapper: HTMLDivElement | null): SharedEntry[] {
       element.setAttribute("data-flip-id", key);
       element.setAttribute(MANAGED_FLIP_ATTR, "true");
 
-      if (!element.dataset.smoothyId) {
+      if (!element.dataset.morphId) {
         element.setAttribute(AUTO_SHARED_KEY_ATTR, key);
       }
 
@@ -287,13 +287,13 @@ function getRevealTargets(wrapper: HTMLDivElement | null): HTMLElement[] {
   const elements = Array.from(wrapper.querySelectorAll<HTMLElement>("*"));
 
   return elements.filter((el) => {
-    if (el.hasAttribute("data-smoothy-ignore-reveal")) return false;
+    if (el.hasAttribute("data-morph-ignore-reveal")) return false;
 
     // Nodes marked as shared are animated only by the shared FLIP pipeline.
     const sharedKey = getEffectiveSharedKey(el);
     if (sharedKey) return false;
 
-    if (el.hasAttribute("data-smoothy-reveal")) return true;
+    if (el.hasAttribute("data-morph-reveal")) return true;
 
     if (el.tagName === "SCRIPT" || el.tagName === "STYLE") return false;
 
@@ -339,8 +339,8 @@ function getRevealCues(
 
 export function useFlipMorph(
   wrapperRef: RefObject<HTMLDivElement | null>,
-  state: SmoothyCardState,
-  config: SmoothyCardConfig | undefined,
+  state: MorphMotionCardState,
+  config: MorphMotionCardConfig | undefined,
 ): void {
   const snapshotRef = useRef<SharedSnapshot>({
     state: null,
@@ -357,7 +357,7 @@ export function useFlipMorph(
   const leavingClonesRef = useRef<HTMLElement[]>([]);
   const activeLeavingClonesRef = useRef<HTMLElement[]>([]);
   const layoutReserveTargetsRef = useRef<HTMLElement[]>([]);
-  const prevStateRef = useRef<SmoothyCardState | null>(null);
+  const prevStateRef = useRef<MorphMotionCardState | null>(null);
 
   useGSAP(
     () => {
