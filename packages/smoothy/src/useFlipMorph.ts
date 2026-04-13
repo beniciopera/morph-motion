@@ -158,7 +158,11 @@ function hasSharedAncestor(
 
   while (current && current !== boundary) {
     const id = current.dataset.smoothyId;
-    if (id && sharedIds.has(id)) return true;
+    if (id && sharedIds.has(id)) {
+      const parent = current.parentElement;
+      // Ignore top-level shared roots (direct children of wrapper boundary).
+      if (parent && parent !== boundary) return true;
+    }
     current = current.parentElement;
   }
 
@@ -415,7 +419,7 @@ export function useFlipMorph(
       const isolatedSet = new Set(sharedIsolatedAfter);
       const sharedCoreAfter = sharedAfter.filter((el) => !isolatedSet.has(el));
       const sharedTextAfter = sharedAfter.filter(isTextSharedElement);
-      const sharedTransformClearAfter = sharedCoreAfter;
+      const sharedTransformClearAfter = sharedAfter;
       const revealTargets = getRevealTargets(
         wrapperRef.current,
         sharedAfterIds,
@@ -524,7 +528,8 @@ export function useFlipMorph(
           absolute: false,
           fade: false,
           nested: false,
-          scale: true,
+          scale: false,
+          simple: true,
         }) as gsap.core.Animation;
 
         tl.add(sharedIsolatedAnimation, 0);
