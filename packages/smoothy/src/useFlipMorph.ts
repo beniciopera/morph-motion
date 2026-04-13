@@ -541,7 +541,7 @@ export function useFlipMorph(
       const sharedTransformClearAfter = sharedAfter;
       const hasSharedMorphTargets = sharedAfter.length > 0;
       const revealDelay = hasSharedMorphTargets
-        ? duration + Math.min(duration * 0.04, 0.03)
+        ? duration * 0.5
         : revealDelayBase;
       const revealWindow = hasSharedMorphTargets
         ? Math.max(duration * 0.2, 0.12)
