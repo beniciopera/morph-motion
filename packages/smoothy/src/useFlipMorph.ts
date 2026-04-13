@@ -212,6 +212,9 @@ function getRevealTargets(
   return elements.filter((el) => {
     if (el.hasAttribute("data-smoothy-ignore-reveal")) return false;
 
+    // Nodes marked as shared are animated only by the shared FLIP pipeline.
+    if (el.dataset.smoothyId) return false;
+
     const id = el.dataset.smoothyId;
     if (id && sharedIds.has(id)) return false;
 
@@ -518,7 +521,7 @@ export function useFlipMorph(
       }
 
       if (sharedIsolatedAfter.length > 0) {
-        // Isolated pass for nested shared elements with strong resize deltas.
+        // Isolated pass for geometric outliers (e.g. thin linear tracks).
         const sharedIsolatedAnimation = Flip.from(prevSnapshot, {
           targets: sharedIsolatedAfter,
           duration,
