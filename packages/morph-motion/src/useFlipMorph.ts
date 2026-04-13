@@ -8,6 +8,7 @@ import type { MorphMotionCardState, MorphMotionCardConfig } from "./types";
 type SharedSnapshot = {
   state: Flip.FlipState | null;
   ids: Set<string>;
+  wrapperHeight: number;
 };
 
 type SharedEntry = {
@@ -186,9 +187,16 @@ function getLayoutReserveTargets(
     }
   });
 
-  reserve.add(wrapper);
+  // Wrapper is handled separately via a height tween so the shell grows/shrinks
+  // smoothly instead of snapping to the final layout size.
 
   return Array.from(reserve);
+}
+
+function measureWrapperHeight(wrapper: HTMLDivElement | null): number {
+  if (!wrapper) return 0;
+  const rect = wrapper.getBoundingClientRect();
+  return rect.height > 0 ? rect.height : 0;
 }
 
 function createLeavingClones(wrapper: HTMLDivElement | null): HTMLElement[] {
@@ -345,18 +353,22 @@ export function useFlipMorph(
   const snapshotRef = useRef<SharedSnapshot>({
     state: null,
     ids: new Set(),
+    wrapperHeight: 0,
   });
   const targetSnapshotRef = useRef<SharedSnapshot>({
     state: null,
     ids: new Set(),
+    wrapperHeight: 0,
   });
   const wrapLockTargetsRef = useRef<HTMLElement[]>([]);
   const revealTextWrapLockTargetsRef = useRef<HTMLElement[]>([]);
   const revealInlineDisplayLockTargetsRef = useRef<HTMLElement[]>([]);
+  const transitionLockTargetsRef = useRef<HTMLElement[]>([]);
   const timelineRef = useRef<gsap.core.Timeline | null>(null);
   const leavingClonesRef = useRef<HTMLElement[]>([]);
   const activeLeavingClonesRef = useRef<HTMLElement[]>([]);
   const layoutReserveTargetsRef = useRef<HTMLElement[]>([]);
+  const wrapperSizeLockActiveRef = useRef<boolean>(false);
   const prevStateRef = useRef<MorphMotionCardState | null>(null);
 
   useGSAP(
@@ -418,6 +430,42 @@ export function useFlipMorph(
         revealInlineDisplayLockTargetsRef.current = [];
       };
 
+      const clearTransitionLocks = () => {
+        if (transitionLockTargetsRef.current.length === 0) return;
+
+        gsap.set(transitionLockTargetsRef.current, {
+          clearProps: "transition",
+        });
+        transitionLockTargetsRef.current = [];
+      };
+
+      // CSS transitions on user components (e.g. shadcn's `transition-all`) fight
+      // frame-by-frame with GSAP's tweens and cause jitter/direction reversals.
+      const applyTransitionLocks = () => {
+        clearTransitionLocks();
+        if (!wrapperRef.current) return;
+
+        const targets = Array.from(
+          wrapperRef.current.querySelectorAll<HTMLElement>("*"),
+        ).filter(
+          (el) => el.tagName !== "SCRIPT" && el.tagName !== "STYLE",
+        );
+        if (targets.length === 0) return;
+
+        gsap.set(targets, { transition: "none" });
+        transitionLockTargetsRef.current = targets;
+      };
+
+      const clearWrapperSizeLock = () => {
+        if (!wrapperSizeLockActiveRef.current) return;
+        if (wrapperRef.current) {
+          gsap.set(wrapperRef.current, {
+            clearProps: "height,overflow",
+          });
+        }
+        wrapperSizeLockActiveRef.current = false;
+      };
+
       const captureSnapshot = () => {
         const sharedEntries = getSharedEntries(wrapperRef.current);
         const elements = sharedEntries.map(({ element }) => element);
@@ -427,6 +475,7 @@ export function useFlipMorph(
               ? Flip.getState(elements, { props: SHARED_TEXT_PROPS })
               : null,
           ids: collectSharedIds(sharedEntries),
+          wrapperHeight: measureWrapperHeight(wrapperRef.current),
         };
 
         leavingClonesRef.current = createLeavingClones(wrapperRef.current);
@@ -473,8 +522,10 @@ export function useFlipMorph(
         clearWrapLocks();
         clearRevealTextWrapLocks();
         clearRevealInlineDisplayLocks();
+        clearTransitionLocks();
         clearActiveLeavingClones();
         clearLayoutReserves();
+        clearWrapperSizeLock();
 
         if (timelineRef.current) {
           timelineRef.current.kill();
@@ -500,8 +551,15 @@ export function useFlipMorph(
         clearWrapLocks();
         clearRevealTextWrapLocks();
         clearRevealInlineDisplayLocks();
+        clearTransitionLocks();
         clearActiveLeavingClones();
         clearLayoutReserves();
+        // Capture the in-flight wrapper height BEFORE clearing the lock so the
+        // next cycle animates from the point we interrupted at, not a snap.
+        const interruptedWrapperHeight = measureWrapperHeight(
+          wrapperRef.current,
+        );
+        clearWrapperSizeLock();
         timelineRef.current.kill();
         timelineRef.current = null;
         // When toggling quickly, use the previous cycle target snapshot as new baseline.
@@ -509,9 +567,13 @@ export function useFlipMorph(
           snapshotRef.current = {
             state: targetSnapshotRef.current.state,
             ids: new Set(targetSnapshotRef.current.ids),
+            wrapperHeight: interruptedWrapperHeight,
           };
         } else if (!snapshotRef.current.state) {
           captureSnapshot();
+          snapshotRef.current.wrapperHeight = interruptedWrapperHeight;
+        } else {
+          snapshotRef.current.wrapperHeight = interruptedWrapperHeight;
         }
       }
 
@@ -522,6 +584,8 @@ export function useFlipMorph(
       }
 
       const oldIds = snapshotRef.current.ids;
+      const oldWrapperHeight = snapshotRef.current.wrapperHeight;
+      const newWrapperHeight = measureWrapperHeight(wrapperRef.current);
       const allNewEntries = getSharedEntries(wrapperRef.current);
       const allNew = allNewEntries.map(({ element }) => element);
 
@@ -531,6 +595,7 @@ export function useFlipMorph(
             ? Flip.getState(allNew, { props: SHARED_TEXT_PROPS })
             : null,
         ids: collectSharedIds(allNewEntries),
+        wrapperHeight: newWrapperHeight,
       };
 
       const sharedAfterEntries = allNewEntries.filter(({ key }) =>
@@ -568,12 +633,15 @@ export function useFlipMorph(
       ) {
         clearRevealTextWrapLocks();
         clearRevealInlineDisplayLocks();
+        clearTransitionLocks();
         clearLayoutReserves();
         config?.onStart?.();
         config?.onComplete?.();
         prevStateRef.current = state;
         return captureSnapshot;
       }
+
+      applyTransitionLocks();
 
       if (sharedAfter.length > 0) {
         gsap.set(sharedAfter, { autoAlpha: 1 });
@@ -631,8 +699,10 @@ export function useFlipMorph(
           clearWrapLocks();
           clearRevealTextWrapLocks();
           clearRevealInlineDisplayLocks();
+          clearTransitionLocks();
           clearActiveLeavingClones();
           clearLayoutReserves();
+          clearWrapperSizeLock();
 
           // Ensure shared nodes end exactly in the layout-driven final state.
           if (sharedTransformClearAfter.length > 0) {
@@ -652,6 +722,7 @@ export function useFlipMorph(
             snapshotRef.current = {
               state: targetSnapshotRef.current.state,
               ids: new Set(targetSnapshotRef.current.ids),
+              wrapperHeight: measureWrapperHeight(wrapperRef.current),
             };
           }
 
@@ -664,6 +735,31 @@ export function useFlipMorph(
       }
 
       const tl = gsap.timeline(timelineVars);
+
+      const wrapperHeightDelta = Math.abs(newWrapperHeight - oldWrapperHeight);
+      const shouldTweenWrapperHeight =
+        oldWrapperHeight > 0 &&
+        newWrapperHeight > 0 &&
+        wrapperHeightDelta > 0.5 &&
+        wrapperRef.current !== null;
+
+      if (shouldTweenWrapperHeight && wrapperRef.current) {
+        gsap.set(wrapperRef.current, {
+          height: oldWrapperHeight,
+          overflow: "hidden",
+        });
+        wrapperSizeLockActiveRef.current = true;
+
+        tl.to(
+          wrapperRef.current,
+          {
+            height: newWrapperHeight,
+            duration,
+            ease,
+          },
+          0,
+        );
+      }
 
       if (sharedAfter.length > 0) {
         // Main shared pass keeps parent/child text/layout continuity.
