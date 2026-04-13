@@ -5,9 +5,17 @@ import { gsap } from "gsap";
 import { Flip } from "gsap/dist/Flip";
 import type { SmoothyCardState, SmoothyCardConfig } from "./types";
 
+type SharedMetrics = {
+  width: number;
+  height: number;
+  children: number;
+  isText: boolean;
+};
+
 type SharedSnapshot = {
   state: Flip.FlipState | null;
   ids: Set<string>;
+  metrics: Map<string, SharedMetrics>;
 };
 
 type RevealCue = {
@@ -120,6 +128,75 @@ function collectSharedIds(elements: HTMLElement[]): Set<string> {
   );
 }
 
+function collectSharedMetrics(
+  elements: HTMLElement[],
+): Map<string, SharedMetrics> {
+  const metrics = new Map<string, SharedMetrics>();
+
+  elements.forEach((el) => {
+    const id = el.dataset.smoothyId;
+    if (!id || metrics.has(id)) return;
+
+    const rect = el.getBoundingClientRect();
+    metrics.set(id, {
+      width: Math.max(rect.width, 0),
+      height: Math.max(rect.height, 0),
+      children: el.children.length,
+      isText: isTextSharedElement(el),
+    });
+  });
+
+  return metrics;
+}
+
+function hasSharedAncestor(
+  element: HTMLElement,
+  sharedIds: Set<string>,
+  boundary: HTMLElement | null,
+): boolean {
+  let current = element.parentElement;
+
+  while (current && current !== boundary) {
+    const id = current.dataset.smoothyId;
+    if (id && sharedIds.has(id)) return true;
+    current = current.parentElement;
+  }
+
+  return false;
+}
+
+function shouldIsolateSharedElement(
+  element: HTMLElement,
+  previousMetrics: SharedMetrics | undefined,
+  sharedIds: Set<string>,
+  boundary: HTMLElement | null,
+): boolean {
+  if (!previousMetrics) return false;
+  if (previousMetrics.isText || isTextSharedElement(element)) return false;
+
+  if (!hasSharedAncestor(element, sharedIds, boundary)) {
+    return false;
+  }
+
+  if (previousMetrics.width <= 0 || previousMetrics.height <= 0) {
+    return false;
+  }
+
+  const rect = element.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return false;
+
+  const widthDelta =
+    Math.abs(rect.width - previousMetrics.width) / previousMetrics.width;
+  const heightDelta =
+    Math.abs(rect.height - previousMetrics.height) / previousMetrics.height;
+  const hasStrongResize = widthDelta > 0.2 || heightDelta > 0.2;
+
+  if (!hasStrongResize) return false;
+
+  // Leaf-like visual blocks are the most sensitive to nested FLIP compensation.
+  return previousMetrics.children <= 1 || element.children.length <= 1;
+}
+
 function getRevealTargets(
   wrapper: HTMLDivElement | null,
   sharedIds: Set<string>,
@@ -181,10 +258,15 @@ export function useFlipMorph(
   state: SmoothyCardState,
   config: SmoothyCardConfig | undefined,
 ): void {
-  const snapshotRef = useRef<SharedSnapshot>({ state: null, ids: new Set() });
+  const snapshotRef = useRef<SharedSnapshot>({
+    state: null,
+    ids: new Set(),
+    metrics: new Map(),
+  });
   const targetSnapshotRef = useRef<SharedSnapshot>({
     state: null,
     ids: new Set(),
+    metrics: new Map(),
   });
   const wrapLockTargetsRef = useRef<HTMLElement[]>([]);
   const timelineRef = useRef<gsap.core.Timeline | null>(null);
@@ -218,6 +300,7 @@ export function useFlipMorph(
               ? Flip.getState(elements, { props: SHARED_TEXT_PROPS })
               : null,
           ids: collectSharedIds(elements),
+          metrics: collectSharedMetrics(elements),
         };
 
         leavingClonesRef.current = createLeavingClones(wrapperRef.current);
@@ -265,8 +348,8 @@ export function useFlipMorph(
         const reducedTargets = getRevealTargets(wrapperRef.current, new Set());
         if (reducedTargets.length > 0) {
           gsap.set(reducedTargets, {
-            autoAlpha: 1,
-            clearProps: "filter,opacity,visibility",
+            opacity: 1,
+            clearProps: "filter,opacity,pointerEvents",
           });
         }
 
@@ -287,6 +370,7 @@ export function useFlipMorph(
           snapshotRef.current = {
             state: targetSnapshotRef.current.state,
             ids: new Set(targetSnapshotRef.current.ids),
+            metrics: new Map(targetSnapshotRef.current.metrics),
           };
         } else if (!snapshotRef.current.state) {
           captureSnapshot();
@@ -308,6 +392,7 @@ export function useFlipMorph(
             ? Flip.getState(allNew, { props: SHARED_TEXT_PROPS })
             : null,
         ids: collectSharedIds(allNew),
+        metrics: collectSharedMetrics(allNew),
       };
 
       const sharedAfter = allNew.filter(
@@ -316,6 +401,21 @@ export function useFlipMorph(
           oldIds.has(el.dataset.smoothyId),
       );
       const sharedAfterIds = collectSharedIds(sharedAfter);
+      const sharedIsolatedAfter = sharedAfter.filter((el) => {
+        const id = el.dataset.smoothyId;
+        if (!id) return false;
+
+        return shouldIsolateSharedElement(
+          el,
+          snapshotRef.current.metrics.get(id),
+          sharedAfterIds,
+          wrapperRef.current,
+        );
+      });
+      const isolatedSet = new Set(sharedIsolatedAfter);
+      const sharedCoreAfter = sharedAfter.filter((el) => !isolatedSet.has(el));
+      const sharedTextAfter = sharedAfter.filter(isTextSharedElement);
+      const sharedTransformClearAfter = sharedCoreAfter;
       const revealTargets = getRevealTargets(
         wrapperRef.current,
         sharedAfterIds,
@@ -346,8 +446,9 @@ export function useFlipMorph(
 
       if (revealTargets.length > 0) {
         gsap.set(revealTargets, {
-          autoAlpha: 0,
+          opacity: 0,
           filter: `blur(${revealBlurStart}px)`,
+          pointerEvents: "none",
         });
       }
 
@@ -363,10 +464,25 @@ export function useFlipMorph(
           clearWrapLocks();
           clearActiveLeavingClones();
 
+          // Ensure shared nodes end exactly in the layout-driven final state.
+          if (sharedTransformClearAfter.length > 0) {
+            gsap.set(sharedTransformClearAfter, {
+              clearProps: "transform,x,y,rotation,scale,scaleX,scaleY",
+            });
+          }
+
+          if (sharedTextAfter.length > 0) {
+            gsap.set(sharedTextAfter, {
+              clearProps:
+                "fontSize,lineHeight,fontWeight,letterSpacing,wordSpacing,fontVariationSettings",
+            });
+          }
+
           if (targetSnapshotRef.current.state) {
             snapshotRef.current = {
               state: targetSnapshotRef.current.state,
               ids: new Set(targetSnapshotRef.current.ids),
+              metrics: new Map(targetSnapshotRef.current.metrics),
             };
           }
 
@@ -380,12 +496,13 @@ export function useFlipMorph(
 
       const tl = gsap.timeline(timelineVars);
 
-      if (sharedAfter.length > 0) {
-        // Keep all shared nodes in one FLIP pass so parent/child transforms stay in sync.
-        const sharedAnimation = Flip.from(prevSnapshot, {
-          targets: sharedAfter,
+      if (sharedCoreAfter.length > 0) {
+        // Main shared pass keeps parent/child text/layout continuity.
+        const sharedCoreAnimation = Flip.from(prevSnapshot, {
+          targets: sharedCoreAfter,
           duration,
           ease,
+          immediateRender: true,
           props: SHARED_TEXT_PROPS,
           absolute: false,
           fade: false,
@@ -393,7 +510,24 @@ export function useFlipMorph(
           scale: false,
         }) as gsap.core.Animation;
 
-        tl.add(sharedAnimation, 0);
+        tl.add(sharedCoreAnimation, 0);
+      }
+
+      if (sharedIsolatedAfter.length > 0) {
+        // Isolated pass for nested shared elements with strong resize deltas.
+        const sharedIsolatedAnimation = Flip.from(prevSnapshot, {
+          targets: sharedIsolatedAfter,
+          duration,
+          ease,
+          immediateRender: true,
+          props: "width,height,borderRadius",
+          absolute: false,
+          fade: false,
+          nested: false,
+          scale: true,
+        }) as gsap.core.Animation;
+
+        tl.add(sharedIsolatedAnimation, 0);
       }
 
       if (leavingClones.length > 0) {
@@ -418,7 +552,7 @@ export function useFlipMorph(
           tl.to(
             element,
             {
-              autoAlpha: revealOpacityMid,
+              opacity: revealOpacityMid,
               filter: `blur(${revealBlurMid}px)`,
               duration: revealDuration * 0.5,
               ease: revealEaseStart,
@@ -430,12 +564,13 @@ export function useFlipMorph(
           tl.to(
             element,
             {
-              autoAlpha: 1,
+              opacity: 1,
               filter: "blur(0px)",
               duration: revealDuration * 0.5,
               ease: revealEaseEnd,
               overwrite: "auto",
-              clearProps: "filter,opacity,visibility",
+              pointerEvents: "auto",
+              clearProps: "filter,opacity,pointerEvents",
             },
             startAt + revealDuration * 0.5,
           );
