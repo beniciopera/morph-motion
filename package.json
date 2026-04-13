@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "name": "smoothy-workspace",
+  "workspaces": ["packages/*", "playground"],
+  "scripts": {
+    "build": "npm run build -w smoothy",
+    "dev": "npm run dev -w playground",
+    "build:lib": "npm run build -w smoothy",
+    "dev:playground": "npm run dev -w playground"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "smoothy",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Two-state shadcn Card morphs with shared-element animations via GSAP Flip.",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch"
+  },
+  "peerDependencies": {
+    "react": ">=19 <20",
+    "gsap": ">=3.12 <4",
+    "@gsap/react": ">=2 <3"
+  },
+  "devDependencies": {
+    "@gsap/react": "^2.1.1",
+    "@types/react": "^19.0.0",
+    "gsap": "^3.12.5",
+    "react": "^19.0.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0"
+  },
+  "license": "MIT"
+}
