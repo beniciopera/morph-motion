@@ -306,20 +306,17 @@ function getRevealCues(
 
   const wrapperRect = wrapper.getBoundingClientRect();
   const width = Math.max(wrapperRect.width, 1);
-  const height = Math.max(wrapperRect.height, 1);
 
   return targets
     .map((element) => {
       const rect = element.getBoundingClientRect();
       const centerX = rect.left + rect.width / 2;
-      const centerY = rect.top + rect.height / 2;
       const nx = clamp01((centerX - wrapperRect.left) / width);
-      const ny = clamp01((centerY - wrapperRect.top) / height);
 
-      // Element becomes visible once card growth reaches its final area.
+      // Keep a deterministic reveal sweep from right to left.
       return {
         element,
-        threshold: Math.max(nx, ny),
+        threshold: 1 - nx,
       };
     })
     .sort((a, b) => a.threshold - b.threshold);
@@ -411,10 +408,12 @@ export function useFlipMorph(
       const ease = config?.ease ?? "power2.inOut";
       const revealDelay = Math.min(duration * 0.12, 0.1);
       const revealWindow = Math.max(duration * 0.74, 0.24);
-      const revealDuration = Math.max(duration * 0.62, 0.3);
-      const revealBlurStart = 12;
-      const revealBlurMid = 4;
-      const revealOpacityMid = 0.8;
+      const revealDuration = Math.max(duration * 0.8, 0.18);
+      const revealBlurStart = 8;
+      const revealBlurMid = 3;
+      const revealOpacityMid = 0.9;
+      const revealShiftStart = 18;
+      const revealShiftMid = 6;
       const hideDuration = Math.max(duration * 0.42, 0.22);
       const hideBlurEnd = 20;
       const revealPreRoll = Math.min(revealDuration * 0.24, 0.08);
@@ -531,6 +530,7 @@ export function useFlipMorph(
       if (revealTargets.length > 0) {
         gsap.set(revealTargets, {
           opacity: 0,
+          x: revealShiftStart,
           visibility: "visible",
           filter: `blur(${revealBlurStart}px)`,
           pointerEvents: "none",
@@ -621,6 +621,7 @@ export function useFlipMorph(
             element,
             {
               opacity: revealOpacityMid,
+              x: revealShiftMid,
               filter: `blur(${revealBlurMid}px)`,
               duration: revealDuration * 0.5,
               ease: revealEaseStart,
@@ -633,12 +634,13 @@ export function useFlipMorph(
             element,
             {
               opacity: 1,
+              x: 0,
               filter: "blur(0px)",
               duration: revealDuration * 0.5,
               ease: revealEaseEnd,
               overwrite: "auto",
               pointerEvents: "auto",
-              clearProps: "filter,opacity,pointerEvents,visibility",
+              clearProps: "filter,opacity,pointerEvents,visibility,x",
             },
             startAt + revealDuration * 0.5,
           );
