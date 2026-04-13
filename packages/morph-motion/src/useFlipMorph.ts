@@ -503,6 +503,12 @@ export function useFlipMorph(
           ? Math.max(configuredRevealShift, 0)
           : 0.6;
       const revealShiftMid = revealShiftStart * 0.1;
+      const configuredSharedBlur = config?.sharedBlur;
+      const sharedBlurPeak =
+        typeof configuredSharedBlur === "number" &&
+        Number.isFinite(configuredSharedBlur)
+          ? Math.max(configuredSharedBlur, 0)
+          : 0;
       const hideDuration = Math.max(duration * 0.42, 0.22);
       const hideBlurEnd = 20;
       const revealPreRollBase = Math.min(revealDuration * 0.24, 0.08);
@@ -548,6 +554,19 @@ export function useFlipMorph(
 
       // Interruption — kill current timeline and re-snapshot live DOM
       if (timelineRef.current) {
+        // Clear stuck inline filter from the previous blur pass so the next
+        // cycle doesn't start from a mid-blur state.
+        if (wrapperRef.current) {
+          const prevManaged = Array.from(
+            wrapperRef.current.querySelectorAll<HTMLElement>(
+              `[${MANAGED_FLIP_ATTR}]`,
+            ),
+          );
+          if (prevManaged.length > 0) {
+            gsap.set(prevManaged, { clearProps: "filter" });
+          }
+        }
+
         clearWrapLocks();
         clearRevealTextWrapLocks();
         clearRevealInlineDisplayLocks();
@@ -707,7 +726,7 @@ export function useFlipMorph(
           // Ensure shared nodes end exactly in the layout-driven final state.
           if (sharedTransformClearAfter.length > 0) {
             gsap.set(sharedTransformClearAfter, {
-              clearProps: "transform,x,y,rotation,scale,scaleX,scaleY",
+              clearProps: "transform,x,y,rotation,scale,scaleX,scaleY,filter",
             });
           }
 
@@ -776,6 +795,31 @@ export function useFlipMorph(
         }) as gsap.core.Animation;
 
         tl.add(sharedCoreAnimation, 0);
+
+        if (sharedBlurPeak > 0) {
+          const blurHalf = duration * 0.5;
+          tl.fromTo(
+            sharedAfter,
+            { filter: "blur(0px)" },
+            {
+              filter: `blur(${sharedBlurPeak}px)`,
+              duration: blurHalf,
+              ease: "sine.out",
+              overwrite: "auto",
+            },
+            0,
+          );
+          tl.to(
+            sharedAfter,
+            {
+              filter: "blur(0px)",
+              duration: blurHalf,
+              ease: "sine.in",
+              overwrite: "auto",
+            },
+            blurHalf,
+          );
+        }
       }
 
       if (leavingClones.length > 0) {
