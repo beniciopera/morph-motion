@@ -10,17 +10,193 @@ type SharedSnapshot = {
   ids: Set<string>;
 };
 
+type SharedEntry = {
+  element: HTMLElement;
+  key: string;
+};
+
 type RevealCue = {
   element: HTMLElement;
   threshold: number;
 };
 
+const AUTO_SHARED_KEY_ATTR = "data-smoothy-auto-id";
+const MANAGED_FLIP_ATTR = "data-smoothy-managed-flip";
+
+function getEffectiveSharedKey(el: HTMLElement): string | null {
+  const explicit = el.dataset.smoothyId?.trim();
+  if (explicit) return explicit;
+
+  const auto = el.getAttribute(AUTO_SHARED_KEY_ATTR)?.trim();
+  if (!auto) return null;
+
+  return auto;
+}
+
+function getDepthWithinWrapper(
+  wrapper: HTMLDivElement,
+  element: HTMLElement,
+): number {
+  let depth = 0;
+  let current = element.parentElement;
+
+  while (current && current !== wrapper) {
+    depth += 1;
+    current = current.parentElement;
+  }
+
+  return depth;
+}
+
+function clearManagedSharedAttrs(wrapper: HTMLDivElement): void {
+  const autoNodes = Array.from(
+    wrapper.querySelectorAll<HTMLElement>(`[${AUTO_SHARED_KEY_ATTR}]`),
+  );
+  autoNodes.forEach((el) => {
+    el.removeAttribute(AUTO_SHARED_KEY_ATTR);
+  });
+
+  const managedFlipNodes = Array.from(
+    wrapper.querySelectorAll<HTMLElement>(`[${MANAGED_FLIP_ATTR}]`),
+  );
+  managedFlipNodes.forEach((el) => {
+    el.removeAttribute(MANAGED_FLIP_ATTR);
+    el.removeAttribute("data-flip-id");
+  });
+}
+
+function addAutoSharedEntries(
+  wrapper: HTMLDivElement,
+  sharedByElement: Map<HTMLElement, string>,
+): void {
+  const containerOrderByBase = new Map<HTMLElement, number>();
+  const baseCounters = new Map<string, number>();
+
+  Array.from(
+    wrapper.querySelectorAll<HTMLElement>("[data-all-smoothy-id]"),
+  ).forEach((element) => {
+    const base = element.getAttribute("data-all-smoothy-id")?.trim();
+    if (!base) return;
+
+    const instance = baseCounters.get(base) ?? 0;
+    containerOrderByBase.set(element, instance);
+    baseCounters.set(base, instance + 1);
+  });
+
+  const containers = Array.from(
+    wrapper.querySelectorAll<HTMLElement>("[data-all-smoothy-id]"),
+  )
+    .map((element) => ({
+      element,
+      depth: getDepthWithinWrapper(wrapper, element),
+      containerInstance: containerOrderByBase.get(element) ?? 0,
+    }))
+    .sort((a, b) => b.depth - a.depth);
+
+  const visit = (
+    node: HTMLElement,
+    base: string,
+    containerInstance: number,
+    path: string,
+  ): void => {
+    if (node.tagName === "SCRIPT" || node.tagName === "STYLE") return;
+
+    const key = `all:${base}:${containerInstance}:${path}`;
+    const explicit = node.dataset.smoothyId?.trim();
+    if (!explicit && !sharedByElement.has(node)) {
+      sharedByElement.set(node, key);
+    }
+
+    if (!explicit) {
+      const resolved = sharedByElement.get(node);
+      if (resolved) {
+        node.setAttribute(AUTO_SHARED_KEY_ATTR, resolved);
+      }
+    }
+
+    Array.from(node.children).forEach((child, index) => {
+      if (!(child instanceof HTMLElement)) return;
+      visit(child, base, containerInstance, `${path}.${index}`);
+    });
+  };
+
+  containers.forEach(({ element, containerInstance }) => {
+    const base = element.getAttribute("data-all-smoothy-id")?.trim();
+    if (!base) return;
+    visit(element, base, containerInstance, "root");
+  });
+}
+
+function getSharedEntries(wrapper: HTMLDivElement | null): SharedEntry[] {
+  if (!wrapper) return [];
+
+  clearManagedSharedAttrs(wrapper);
+
+  const sharedByElement = new Map<HTMLElement, string>();
+  const explicitElements = Array.from(
+    wrapper.querySelectorAll<HTMLElement>("[data-smoothy-id]"),
+  );
+
+  explicitElements.forEach((el) => {
+    const id = el.dataset.smoothyId?.trim();
+    if (!id) return;
+
+    sharedByElement.set(el, id);
+    el.removeAttribute(AUTO_SHARED_KEY_ATTR);
+  });
+
+  addAutoSharedEntries(wrapper, sharedByElement);
+
+  const entries = Array.from(sharedByElement.entries()).map(
+    ([element, key]) => {
+      element.setAttribute("data-flip-id", key);
+      element.setAttribute(MANAGED_FLIP_ATTR, "true");
+
+      if (!element.dataset.smoothyId) {
+        element.setAttribute(AUTO_SHARED_KEY_ATTR, key);
+      }
+
+      return { element, key };
+    },
+  );
+
+  return entries;
+}
+
+function getLayoutReserveTargets(
+  wrapper: HTMLDivElement | null,
+  revealTargets: HTMLElement[],
+): HTMLElement[] {
+  if (!wrapper || revealTargets.length === 0) return [];
+
+  const reserve = new Set<HTMLElement>();
+
+  revealTargets.forEach((target) => {
+    let parent = target.parentElement;
+
+    while (parent && parent !== wrapper) {
+      if (getEffectiveSharedKey(parent)) break;
+      if (parent.hasAttribute("data-smoothy-ignore-reveal")) break;
+      if (parent.tagName === "SCRIPT" || parent.tagName === "STYLE") break;
+      if (
+        parent.querySelector(`[data-smoothy-id], [${AUTO_SHARED_KEY_ATTR}]`) !==
+        null
+      ) {
+        break;
+      }
+
+      reserve.add(parent);
+      parent = parent.parentElement;
+    }
+  });
+
+  return Array.from(reserve);
+}
+
 function createLeavingClones(wrapper: HTMLDivElement | null): HTMLElement[] {
   if (!wrapper) return [];
 
-  const sharedElements = getSharedElements(wrapper);
-  const sharedIds = collectSharedIds(sharedElements);
-  const leavingTargets = getRevealTargets(wrapper, sharedIds);
+  const leavingTargets = getRevealTargets(wrapper);
 
   return leavingTargets
     .map((target) => {
@@ -95,35 +271,11 @@ function getSingleLineSharedTextTargets(shared: HTMLElement[]): HTMLElement[] {
   });
 }
 
-function getSharedElements(wrapper: HTMLDivElement | null): HTMLElement[] {
-  if (!wrapper) return [];
-
-  const elements = Array.from(
-    wrapper.querySelectorAll<HTMLElement>("[data-smoothy-id]"),
-  );
-
-  // Flip matches across state changes via data-flip-id.
-  elements.forEach((el) => {
-    const id = el.dataset.smoothyId;
-    if (!id) return;
-    el.setAttribute("data-flip-id", id);
-  });
-
-  return elements;
+function collectSharedIds(entries: SharedEntry[]): Set<string> {
+  return new Set(entries.map(({ key }) => key));
 }
 
-function collectSharedIds(elements: HTMLElement[]): Set<string> {
-  return new Set(
-    elements
-      .map((el) => el.dataset.smoothyId)
-      .filter((id): id is string => typeof id === "string"),
-  );
-}
-
-function getRevealTargets(
-  wrapper: HTMLDivElement | null,
-  sharedIds: Set<string>,
-): HTMLElement[] {
+function getRevealTargets(wrapper: HTMLDivElement | null): HTMLElement[] {
   if (!wrapper) return [];
 
   const elements = Array.from(wrapper.querySelectorAll<HTMLElement>("*"));
@@ -132,10 +284,8 @@ function getRevealTargets(
     if (el.hasAttribute("data-smoothy-ignore-reveal")) return false;
 
     // Nodes marked as shared are animated only by the shared FLIP pipeline.
-    if (el.dataset.smoothyId) return false;
-
-    const id = el.dataset.smoothyId;
-    if (id && sharedIds.has(id)) return false;
+    const sharedKey = getEffectiveSharedKey(el);
+    if (sharedKey) return false;
 
     if (el.hasAttribute("data-smoothy-reveal")) return true;
 
@@ -196,6 +346,7 @@ export function useFlipMorph(
   const timelineRef = useRef<gsap.core.Timeline | null>(null);
   const leavingClonesRef = useRef<HTMLElement[]>([]);
   const activeLeavingClonesRef = useRef<HTMLElement[]>([]);
+  const layoutReserveTargetsRef = useRef<HTMLElement[]>([]);
   const prevStateRef = useRef<SmoothyCardState | null>(null);
 
   useGSAP(
@@ -205,6 +356,29 @@ export function useFlipMorph(
 
         activeLeavingClonesRef.current.forEach((clone) => clone.remove());
         activeLeavingClonesRef.current = [];
+      };
+
+      const clearLayoutReserves = () => {
+        if (layoutReserveTargetsRef.current.length === 0) return;
+
+        gsap.set(layoutReserveTargetsRef.current, {
+          clearProps: "minHeight",
+        });
+        layoutReserveTargetsRef.current = [];
+      };
+
+      const applyLayoutReserves = (targets: HTMLElement[]) => {
+        clearLayoutReserves();
+        if (targets.length === 0) return;
+
+        const lockTargets = targets.filter((el) => !getEffectiveSharedKey(el));
+        lockTargets.forEach((el) => {
+          const rect = el.getBoundingClientRect();
+          if (rect.height <= 0) return;
+          gsap.set(el, { minHeight: `${rect.height}px` });
+        });
+
+        layoutReserveTargetsRef.current = lockTargets;
       };
 
       const clearWrapLocks = () => {
@@ -217,13 +391,14 @@ export function useFlipMorph(
       };
 
       const captureSnapshot = () => {
-        const elements = getSharedElements(wrapperRef.current);
+        const sharedEntries = getSharedEntries(wrapperRef.current);
+        const elements = sharedEntries.map(({ element }) => element);
         snapshotRef.current = {
           state:
             elements.length > 0
               ? Flip.getState(elements, { props: SHARED_TEXT_PROPS })
               : null,
-          ids: collectSharedIds(elements),
+          ids: collectSharedIds(sharedEntries),
         };
 
         leavingClonesRef.current = createLeavingClones(wrapperRef.current);
@@ -262,17 +437,18 @@ export function useFlipMorph(
       if (reduced) {
         clearWrapLocks();
         clearActiveLeavingClones();
+        clearLayoutReserves();
 
         if (timelineRef.current) {
           timelineRef.current.kill();
           timelineRef.current = null;
         }
 
-        const reducedTargets = getRevealTargets(wrapperRef.current, new Set());
+        const reducedTargets = getRevealTargets(wrapperRef.current);
         if (reducedTargets.length > 0) {
           gsap.set(reducedTargets, {
             opacity: 1,
-            clearProps: "filter,opacity,pointerEvents",
+            clearProps: "filter,opacity,pointerEvents,visibility",
           });
         }
 
@@ -286,6 +462,7 @@ export function useFlipMorph(
       if (timelineRef.current) {
         clearWrapLocks();
         clearActiveLeavingClones();
+        clearLayoutReserves();
         timelineRef.current.kill();
         timelineRef.current = null;
         // When toggling quickly, use the previous cycle target snapshot as new baseline.
@@ -306,27 +483,27 @@ export function useFlipMorph(
       }
 
       const oldIds = snapshotRef.current.ids;
-      const allNew = getSharedElements(wrapperRef.current);
+      const allNewEntries = getSharedEntries(wrapperRef.current);
+      const allNew = allNewEntries.map(({ element }) => element);
 
       targetSnapshotRef.current = {
         state:
           allNew.length > 0
             ? Flip.getState(allNew, { props: SHARED_TEXT_PROPS })
             : null,
-        ids: collectSharedIds(allNew),
+        ids: collectSharedIds(allNewEntries),
       };
 
-      const sharedAfter = allNew.filter(
-        (el) =>
-          el.dataset.smoothyId !== undefined &&
-          oldIds.has(el.dataset.smoothyId),
+      const sharedAfterEntries = allNewEntries.filter(({ key }) =>
+        oldIds.has(key),
       );
-      const sharedAfterIds = collectSharedIds(sharedAfter);
+      const sharedAfter = sharedAfterEntries.map(({ element }) => element);
       const sharedTextAfter = sharedAfter.filter(isTextSharedElement);
       const sharedTransformClearAfter = sharedAfter;
-      const revealTargets = getRevealTargets(
+      const revealTargets = getRevealTargets(wrapperRef.current);
+      const layoutReserveTargets = getLayoutReserveTargets(
         wrapperRef.current,
-        sharedAfterIds,
+        revealTargets,
       );
       const revealCues = getRevealCues(wrapperRef.current, revealTargets);
       const leavingClones = leavingClonesRef.current;
@@ -342,6 +519,7 @@ export function useFlipMorph(
         revealTargets.length === 0 &&
         leavingClones.length === 0
       ) {
+        clearLayoutReserves();
         config?.onStart?.();
         config?.onComplete?.();
         prevStateRef.current = state;
@@ -352,9 +530,12 @@ export function useFlipMorph(
         gsap.set(sharedAfter, { autoAlpha: 1 });
       }
 
+      applyLayoutReserves(layoutReserveTargets);
+
       if (revealTargets.length > 0) {
         gsap.set(revealTargets, {
           opacity: 0,
+          visibility: "visible",
           filter: `blur(${revealBlurStart}px)`,
           pointerEvents: "none",
         });
@@ -371,6 +552,7 @@ export function useFlipMorph(
           timelineRef.current = null;
           clearWrapLocks();
           clearActiveLeavingClones();
+          clearLayoutReserves();
 
           // Ensure shared nodes end exactly in the layout-driven final state.
           if (sharedTransformClearAfter.length > 0) {
@@ -460,7 +642,7 @@ export function useFlipMorph(
               ease: revealEaseEnd,
               overwrite: "auto",
               pointerEvents: "auto",
-              clearProps: "filter,opacity,pointerEvents",
+              clearProps: "filter,opacity,pointerEvents,visibility",
             },
             startAt + revealDuration * 0.5,
           );
