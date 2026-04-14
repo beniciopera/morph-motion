@@ -522,10 +522,13 @@ export function useFlipMorph(
   // Triggers we listen to:
   //   - window resize: viewport-level reflow (scrollbars, media queries).
   //   - ResizeObserver on wrapper: content reflow inside this card.
-  //   - ResizeObserver on document.body: page-level reflow from OTHER cards
-  //     morphing above/around this one. Their tween shifts siblings in the
-  //     document flow, moving this wrapper in viewport space without ever
-  //     resizing it, which would otherwise leave this card's baseline stale.
+  //   - ResizeObserver on every ancestor up to <html>: page-level reflow
+  //     from OTHER cards morphing above/around this one. We cannot observe
+  //     document.body alone — pages with `min-h-svh` or similar pin body to
+  //     the viewport height, so body never reports a size change even when
+  //     internal content grows. Walking the ancestor chain guarantees at
+  //     least one ancestor along the layout path will resize when any sibling
+  //     in the flow changes height.
   //
   // Recapture runs synchronously so a reflow + toggle in the same event-loop
   // turn still sees a fresh baseline.
@@ -552,21 +555,23 @@ export function useFlipMorph(
     window.addEventListener("resize", recaptureFull);
 
     let wrapperObserver: ResizeObserver | null = null;
-    let bodyObserver: ResizeObserver | null = null;
+    let ancestorObserver: ResizeObserver | null = null;
     if (typeof ResizeObserver !== "undefined") {
       wrapperObserver = new ResizeObserver(recaptureFull);
       wrapperObserver.observe(wrapper);
 
-      if (typeof document !== "undefined" && document.body) {
-        bodyObserver = new ResizeObserver(recaptureFlipOnly);
-        bodyObserver.observe(document.body);
+      ancestorObserver = new ResizeObserver(recaptureFlipOnly);
+      let ancestor: Element | null = wrapper.parentElement;
+      while (ancestor) {
+        ancestorObserver.observe(ancestor);
+        ancestor = ancestor.parentElement;
       }
     }
 
     return () => {
       window.removeEventListener("resize", recaptureFull);
       wrapperObserver?.disconnect();
-      bodyObserver?.disconnect();
+      ancestorObserver?.disconnect();
     };
   }, [wrapperRef]);
 
