@@ -1,0 +1,48 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "morph-motion",
+  "homepage": "https://github.com/beniciopera/morph-motion",
+  "items": [
+    {
+      "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+      "name": "flip-morph",
+      "type": "registry:hook",
+      "title": "useFlipMorph",
+      "description": "GSAP Flip-based shared-element morph hook for two-state layouts.",
+      "dependencies": ["gsap", "@gsap/react"],
+      "files": [
+        {
+          "path": "registry/hooks/use-flip-morph.ts",
+          "type": "registry:hook"
+        },
+        {
+          "path": "registry/hooks/register-flip.ts",
+          "type": "registry:hook"
+        }
+      ]
+    },
+    {
+      "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+      "name": "morph-card",
+      "type": "registry:component",
+      "title": "MorphCard",
+      "description": "Two-state Card wrapper that morphs between layouts via GSAP Flip shared-element animations.",
+      "dependencies": ["gsap", "@gsap/react"],
+      "files": [
+        {
+          "path": "registry/hooks/use-flip-morph.ts",
+          "type": "registry:hook"
+        },
+        {
+          "path": "registry/hooks/register-flip.ts",
+          "type": "registry:hook"
+        },
+        {
+          "path": "registry/components/morph-motion/card.tsx",
+          "type": "registry:component",
+          "target": "components/morph-motion/card.tsx"
+        }
+      ]
+    }
+  ]
+}

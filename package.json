@@ -6,6 +6,7 @@
     "build": "npm run build -w morph-motion",
     "dev": "npm run dev -w playground",
     "build:lib": "npm run build -w morph-motion",
-    "dev:playground": "npm run dev -w playground"
+    "dev:playground": "npm run dev -w playground",
+    "registry:build": "npx shadcn@latest build"
   }
 }
