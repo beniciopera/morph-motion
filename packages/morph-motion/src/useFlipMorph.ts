@@ -202,7 +202,12 @@ function measureWrapperHeight(wrapper: HTMLDivElement | null): number {
 function createLeavingClones(wrapper: HTMLDivElement | null): HTMLElement[] {
   if (!wrapper) return [];
 
-  const leavingTargets = getRevealTargets(wrapper);
+  const leavingTargets = getRevealTargets(wrapper).filter((el) => {
+    if (el.hasAttribute("data-morph-ignore-exit")) return false;
+    const ancestor = el.closest("[data-morph-ignore-exit]");
+    if (ancestor && wrapper.contains(ancestor)) return false;
+    return true;
+  });
 
   return leavingTargets
     .map((target) => {
@@ -510,7 +515,8 @@ export function useFlipMorph(
           ? Math.max(configuredSharedBlur, 0)
           : 0;
       const hideDuration = Math.max(duration * 0.42, 0.22);
-      const hideBlurEnd = 20;
+      // Mirror reveal's peak blur so entrance and exit feel symmetric.
+      const hideBlurEnd = revealBlurStart;
       const revealPreRollBase = Math.min(revealDuration * 0.24, 0.08);
       const revealEaseStart = "sine.out";
       const revealEaseEnd = "power2.out";
@@ -637,8 +643,12 @@ export function useFlipMorph(
         revealTargets,
       );
       const revealCues = getRevealCues(wrapperRef.current, revealTargets);
+      // Swap: consume previous cycle's clones, stash fresh ones of the
+      // current (incoming) DOM so the next transition has something to fade.
+      // useGSAP's cleanup never runs captureSnapshot on re-renders (deferCleanup
+      // discards the return value), so we must refresh in the body itself.
       const leavingClones = leavingClonesRef.current;
-      leavingClonesRef.current = [];
+      leavingClonesRef.current = createLeavingClones(wrapperRef.current);
 
       if (leavingClones.length > 0) {
         leavingClones.forEach((clone) => document.body.appendChild(clone));

@@ -133,6 +133,7 @@ function ExpandedLayout() {
 | `data-morph-all-id="..."`        | Auto-generates shared keys for an entire subtree.         |
 | `data-morph-reveal`              | Forces an element into reveal animation.                  |
 | `data-morph-ignore-reveal`       | Excludes element from reveal animation.                   |
+| `data-morph-ignore-exit`         | Excludes element (and subtree) from the exit fade-out.    |
 | `data-morph-reveal-delay="0.12"` | Adds explicit reveal delay in seconds.                    |
 
 ## Card config

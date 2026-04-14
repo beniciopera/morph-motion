@@ -97,6 +97,7 @@ Optional advanced markers:
 - `data-all-morph-motion-id`: mark one element and its full subtree as shared.
 - `data-morph-reveal`: force an element to participate in progressive reveal.
 - `data-morph-ignore-reveal`: exclude an element from progressive reveal.
+- `data-morph-ignore-exit`: exclude an element (and its descendants) from the exit fade-out of the outgoing layout.
 - `data-morph-reveal-delay`: optional delay in seconds from the start of the reveal phase for non-shared elements. If omitted, morph-motion uses the automatic right-to-left sweep.
 
 ## Config
