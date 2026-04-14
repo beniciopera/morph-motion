@@ -16,6 +16,11 @@ type SharedEntry = {
   key: string;
 };
 
+type LeavingSnapshot = {
+  container: HTMLDivElement;
+  clones: HTMLElement[];
+};
+
 type RevealCue = {
   element: HTMLElement;
   threshold: number;
@@ -199,8 +204,66 @@ function measureWrapperHeight(wrapper: HTMLDivElement | null): number {
   return rect.height > 0 ? rect.height : 0;
 }
 
-function createLeavingClones(wrapper: HTMLDivElement | null): HTMLElement[] {
-  if (!wrapper) return [];
+function computeClipInset(
+  target: HTMLElement,
+  wrapper: HTMLElement,
+  targetRect: DOMRect,
+): string | null {
+  let clipLeft = -Infinity;
+  let clipTop = -Infinity;
+  let clipRight = Infinity;
+  let clipBottom = Infinity;
+
+  let parent: HTMLElement | null = target.parentElement;
+  while (parent && parent !== wrapper) {
+    const style = window.getComputedStyle(parent);
+    const clipsX =
+      style.overflowX === "hidden" ||
+      style.overflowX === "clip" ||
+      style.overflow === "hidden" ||
+      style.overflow === "clip";
+    const clipsY =
+      style.overflowY === "hidden" ||
+      style.overflowY === "clip" ||
+      style.overflow === "hidden" ||
+      style.overflow === "clip";
+
+    if (clipsX || clipsY) {
+      const parentRect = parent.getBoundingClientRect();
+      if (clipsX) {
+        clipLeft = Math.max(clipLeft, parentRect.left);
+        clipRight = Math.min(clipRight, parentRect.right);
+      }
+      if (clipsY) {
+        clipTop = Math.max(clipTop, parentRect.top);
+        clipBottom = Math.min(clipBottom, parentRect.bottom);
+      }
+    }
+
+    parent = parent.parentElement;
+  }
+
+  const insetTop = clipTop === -Infinity ? 0 : Math.max(0, clipTop - targetRect.top);
+  const insetLeft = clipLeft === -Infinity ? 0 : Math.max(0, clipLeft - targetRect.left);
+  const insetRight =
+    clipRight === Infinity ? 0 : Math.max(0, targetRect.right - clipRight);
+  const insetBottom =
+    clipBottom === Infinity ? 0 : Math.max(0, targetRect.bottom - clipBottom);
+
+  if (insetTop === 0 && insetRight === 0 && insetBottom === 0 && insetLeft === 0) {
+    return null;
+  }
+
+  return `inset(${insetTop}px ${insetRight}px ${insetBottom}px ${insetLeft}px)`;
+}
+
+function createLeavingSnapshot(
+  wrapper: HTMLDivElement | null,
+): LeavingSnapshot | null {
+  if (!wrapper) return null;
+
+  const wrapperRect = wrapper.getBoundingClientRect();
+  if (wrapperRect.width <= 0 || wrapperRect.height <= 0) return null;
 
   const leavingTargets = getRevealTargets(wrapper).filter((el) => {
     if (el.hasAttribute("data-morph-ignore-exit")) return false;
@@ -209,30 +272,61 @@ function createLeavingClones(wrapper: HTMLDivElement | null): HTMLElement[] {
     return true;
   });
 
-  return leavingTargets
-    .map((target) => {
-      const rect = target.getBoundingClientRect();
-      if (rect.width <= 0 || rect.height <= 0) return null;
+  if (leavingTargets.length === 0) return null;
 
-      const clone = target.cloneNode(true) as HTMLElement;
-      clone.setAttribute("aria-hidden", "true");
-      clone.style.position = "fixed";
-      clone.style.left = `${rect.left}px`;
-      clone.style.top = `${rect.top}px`;
-      clone.style.width = `${rect.width}px`;
-      clone.style.height = `${rect.height}px`;
-      clone.style.margin = "0";
-      clone.style.transform = "none";
-      clone.style.transformOrigin = "top left";
-      clone.style.pointerEvents = "none";
-      clone.style.opacity = "1";
-      clone.style.filter = "blur(0px)";
-      clone.style.zIndex = "2147483646";
-      clone.style.willChange = "opacity, filter";
+  const container = document.createElement("div");
+  container.setAttribute("aria-hidden", "true");
+  container.setAttribute("data-morph-leaving-layer", "true");
+  container.style.position = "fixed";
+  container.style.left = `${wrapperRect.left}px`;
+  container.style.top = `${wrapperRect.top}px`;
+  container.style.width = `${wrapperRect.width}px`;
+  container.style.height = `${wrapperRect.height}px`;
+  container.style.margin = "0";
+  container.style.padding = "0";
+  container.style.overflow = "hidden";
+  container.style.pointerEvents = "none";
+  container.style.zIndex = "2147483646";
 
-      return clone;
-    })
-    .filter((clone): clone is HTMLElement => clone !== null);
+  const clones: HTMLElement[] = [];
+
+  leavingTargets.forEach((target) => {
+    const rect = target.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    // Preserve ancestor overflow clipping (e.g. shadcn Progress Root has
+    // overflow-x-hidden that clips the translated Indicator child). Without
+    // this, the clone would render the Indicator at its full unclipped size
+    // and spill outside the progress track.
+    const clipInset = computeClipInset(target, wrapper, rect);
+
+    const clone = target.cloneNode(true) as HTMLElement;
+    clone.removeAttribute("data-flip-id");
+    clone.removeAttribute(MANAGED_FLIP_ATTR);
+    clone.removeAttribute(AUTO_SHARED_KEY_ATTR);
+    clone.style.position = "absolute";
+    clone.style.left = `${rect.left - wrapperRect.left}px`;
+    clone.style.top = `${rect.top - wrapperRect.top}px`;
+    clone.style.width = `${rect.width}px`;
+    clone.style.height = `${rect.height}px`;
+    clone.style.margin = "0";
+    clone.style.transform = "none";
+    clone.style.transformOrigin = "top left";
+    clone.style.pointerEvents = "none";
+    clone.style.opacity = "1";
+    clone.style.filter = "blur(0px)";
+    clone.style.willChange = "opacity, filter";
+    if (clipInset) {
+      clone.style.clipPath = clipInset;
+    }
+
+    container.appendChild(clone);
+    clones.push(clone);
+  });
+
+  if (clones.length === 0) return null;
+
+  return { container, clones };
 }
 
 const SHARED_TEXT_PROPS =
@@ -370,8 +464,8 @@ export function useFlipMorph(
   const revealInlineDisplayLockTargetsRef = useRef<HTMLElement[]>([]);
   const transitionLockTargetsRef = useRef<HTMLElement[]>([]);
   const timelineRef = useRef<gsap.core.Timeline | null>(null);
-  const leavingClonesRef = useRef<HTMLElement[]>([]);
-  const activeLeavingClonesRef = useRef<HTMLElement[]>([]);
+  const leavingSnapshotRef = useRef<LeavingSnapshot | null>(null);
+  const activeLeavingSnapshotRef = useRef<LeavingSnapshot | null>(null);
   const layoutReserveTargetsRef = useRef<HTMLElement[]>([]);
   const wrapperSizeLockActiveRef = useRef<boolean>(false);
   const prevStateRef = useRef<MorphMotionCardState | null>(null);
@@ -379,10 +473,11 @@ export function useFlipMorph(
   useGSAP(
     () => {
       const clearActiveLeavingClones = () => {
-        if (activeLeavingClonesRef.current.length === 0) return;
+        const active = activeLeavingSnapshotRef.current;
+        if (!active) return;
 
-        activeLeavingClonesRef.current.forEach((clone) => clone.remove());
-        activeLeavingClonesRef.current = [];
+        active.container.remove();
+        activeLeavingSnapshotRef.current = null;
       };
 
       const clearLayoutReserves = () => {
@@ -483,7 +578,7 @@ export function useFlipMorph(
           wrapperHeight: measureWrapperHeight(wrapperRef.current),
         };
 
-        leavingClonesRef.current = createLeavingClones(wrapperRef.current);
+        leavingSnapshotRef.current = createLeavingSnapshot(wrapperRef.current);
       };
 
       // First mount — no animation, no snapshot
@@ -643,22 +738,22 @@ export function useFlipMorph(
         revealTargets,
       );
       const revealCues = getRevealCues(wrapperRef.current, revealTargets);
-      // Swap: consume previous cycle's clones, stash fresh ones of the
+      // Swap: consume previous cycle's snapshot, stash a fresh one of the
       // current (incoming) DOM so the next transition has something to fade.
       // useGSAP's cleanup never runs captureSnapshot on re-renders (deferCleanup
       // discards the return value), so we must refresh in the body itself.
-      const leavingClones = leavingClonesRef.current;
-      leavingClonesRef.current = createLeavingClones(wrapperRef.current);
+      const leavingSnapshot = leavingSnapshotRef.current;
+      leavingSnapshotRef.current = createLeavingSnapshot(wrapperRef.current);
 
-      if (leavingClones.length > 0) {
-        leavingClones.forEach((clone) => document.body.appendChild(clone));
+      if (leavingSnapshot) {
+        document.body.appendChild(leavingSnapshot.container);
       }
-      activeLeavingClonesRef.current = leavingClones;
+      activeLeavingSnapshotRef.current = leavingSnapshot;
 
       if (
         sharedAfter.length === 0 &&
         revealTargets.length === 0 &&
-        leavingClones.length === 0
+        !leavingSnapshot
       ) {
         clearRevealTextWrapLocks();
         clearRevealInlineDisplayLocks();
@@ -671,6 +766,26 @@ export function useFlipMorph(
       }
 
       applyTransitionLocks();
+
+      // Third-party primitives (e.g. shadcn/Radix Progress) drive state by
+      // writing inline `transform`/`filter`. Snapshot those BEFORE any gsap.set
+      // touches transform/filter on shared or reveal targets, so we can
+      // restore them after clearProps strips GSAP's values at the end of
+      // the timeline. Must run before the reveal gsap.set below, which uses
+      // `x` (transform) and `filter`.
+      const preservedInlineStyles = new Map<
+        HTMLElement,
+        { transform: string; filter: string }
+      >();
+      const trackInlineStyles = (el: HTMLElement) => {
+        if (preservedInlineStyles.has(el)) return;
+        preservedInlineStyles.set(el, {
+          transform: el.style.transform,
+          filter: el.style.filter,
+        });
+      };
+      sharedAfter.forEach(trackInlineStyles);
+      revealTargets.forEach(trackInlineStyles);
 
       if (sharedAfter.length > 0) {
         gsap.set(sharedAfter, { autoAlpha: 1 });
@@ -707,13 +822,35 @@ export function useFlipMorph(
 
         revealTextWrapLockTargetsRef.current = revealTextWrapLocks;
 
-        gsap.set(revealTargets, {
-          opacity: 0,
-          x: revealShiftStart,
-          visibility: "visible",
-          filter: `blur(${revealBlurStart}px)`,
-          pointerEvents: "none",
-        });
+        // Split reveal targets: elements that carry an inline transform
+        // (e.g. shadcn Progress Indicator with translateX(-X%)) must NOT be
+        // animated via GSAP's `x` prop — it would rewrite their transform
+        // matrix and flash them at 100% until the tween settles. For those
+        // we animate opacity+filter only and keep the transform untouched.
+        const revealShiftTargets = revealTargets.filter(
+          (el) => !preservedInlineStyles.get(el)?.transform,
+        );
+        const revealNoShiftTargets = revealTargets.filter(
+          (el) => !!preservedInlineStyles.get(el)?.transform,
+        );
+
+        if (revealShiftTargets.length > 0) {
+          gsap.set(revealShiftTargets, {
+            opacity: 0,
+            x: revealShiftStart,
+            visibility: "visible",
+            filter: `blur(${revealBlurStart}px)`,
+            pointerEvents: "none",
+          });
+        }
+        if (revealNoShiftTargets.length > 0) {
+          gsap.set(revealNoShiftTargets, {
+            opacity: 0,
+            visibility: "visible",
+            filter: `blur(${revealBlurStart}px)`,
+            pointerEvents: "none",
+          });
+        }
       }
 
       const wrapLockTargets = getSingleLineSharedTextTargets(sharedAfter);
@@ -739,6 +876,20 @@ export function useFlipMorph(
               clearProps: "transform,x,y,rotation,scale,scaleX,scaleY,filter",
             });
           }
+
+          // Reinstate inline transforms/filters that belonged to the user
+          // (not to GSAP) for BOTH shared and reveal targets. Without this,
+          // shadcn/Radix Progress indicators snap back to 100% because their
+          // inline translateX is wiped — once by GSAP's `x` prop on reveal
+          // targets, and once by clearProps on shared targets.
+          preservedInlineStyles.forEach((saved, el) => {
+            if (saved.transform) {
+              el.style.transform = saved.transform;
+            }
+            if (saved.filter) {
+              el.style.filter = saved.filter;
+            }
+          });
 
           if (sharedTextAfter.length > 0) {
             gsap.set(sharedTextAfter, {
@@ -832,9 +983,9 @@ export function useFlipMorph(
         }
       }
 
-      if (leavingClones.length > 0) {
+      if (leavingSnapshot && leavingSnapshot.clones.length > 0) {
         tl.to(
-          leavingClones,
+          leavingSnapshot.clones,
           {
             autoAlpha: 0,
             filter: `blur(${hideBlurEnd}px)`,
