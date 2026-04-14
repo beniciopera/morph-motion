@@ -190,7 +190,7 @@ export function ProductMorphExample() {
         <Card className="overflow-hidden p-0">
           <MorphCard
             state={expanded ? "b" : "a"}
-            config={{ duration: 0.55, revealShift: 1.5, sharedBlur: 2 }}
+            config={{ duration: 0.45, revealShift: 1.5, sharedBlur: 2 }}
           >
             {expanded ? (
               <ExpandedLayout
