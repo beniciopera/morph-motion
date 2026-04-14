@@ -8,11 +8,12 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
-      "morph-motion": path.resolve(
+      "@/components/morph-motion/card": path.resolve(
         __dirname,
-        "../../packages/morph-motion/src/index.ts"
+        "../../registry/components/morph-motion/card.tsx"
       ),
+      "@/hooks": path.resolve(__dirname, "../../registry/hooks"),
+      "@": path.resolve(__dirname, "./src"),
     },
     dedupe: ["react", "react-dom", "@gsap/react", "gsap"],
   },
@@ -20,8 +21,5 @@ export default defineConfig({
     fs: {
       allow: [path.resolve(__dirname, "../..")],
     },
-  },
-  optimizeDeps: {
-    exclude: ["morph-motion"],
   },
 })

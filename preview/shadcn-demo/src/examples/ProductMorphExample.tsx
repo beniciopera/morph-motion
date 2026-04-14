@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Heart, Share2, Star, ShoppingBag, Minus, Plus } from "lucide-react"
-import { MorphMotion } from "morph-motion"
+import { MorphCard } from "@/components/morph-motion/card"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -188,7 +188,7 @@ export function ProductMorphExample() {
     <div className="flex flex-col items-center gap-3">
       <div className="w-full max-w-sm">
         <Card className="overflow-hidden p-0">
-          <MorphMotion.Card
+          <MorphCard
             state={expanded ? "b" : "a"}
             config={{ duration: 0.55, revealShift: 1.5, sharedBlur: 2 }}
           >
@@ -201,7 +201,7 @@ export function ProductMorphExample() {
             ) : (
               <CompactLayout onOpen={() => setExpanded(true)} />
             )}
-          </MorphMotion.Card>
+          </MorphCard>
         </Card>
       </div>
       <Button

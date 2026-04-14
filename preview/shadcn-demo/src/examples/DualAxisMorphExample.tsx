@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { CheckCircle2, Maximize2, Minimize2, Play, Share2 } from "lucide-react"
-import { MorphMotion } from "morph-motion"
+import { MorphCard } from "@/components/morph-motion/card"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -167,7 +167,7 @@ export function DualAxisMorphExample() {
   return (
     <div className="flex flex-col items-center gap-3">
       <Card className="w-fit max-w-full overflow-hidden p-0">
-        <MorphMotion.Card
+        <MorphCard
           state={expanded ? "b" : "a"}
           config={{ duration: 0.55, revealShift: 1.8, sharedBlur: 0 }}
         >
@@ -176,7 +176,7 @@ export function DualAxisMorphExample() {
           ) : (
             <CompactLayout onOpen={() => setExpanded(true)} />
           )}
-        </MorphMotion.Card>
+        </MorphCard>
       </Card>
       <Button
         size="sm"

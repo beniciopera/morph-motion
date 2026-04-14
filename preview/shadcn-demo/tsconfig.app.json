@@ -25,9 +25,13 @@
     "noUncheckedSideEffectImports": true,
     "baseUrl": ".",
     "paths": {
+      "@/components/morph-motion/card": [
+        "../../registry/components/morph-motion/card.tsx"
+      ],
+      "@/hooks/*": ["../../registry/hooks/*"],
       "@/*": ["./src/*"],
-      "morph-motion": ["../../packages/morph-motion/src/index.ts"]
+      "@/hooks": ["../../registry/hooks"]
     }
   },
-  "include": ["src", "../../packages/morph-motion/src"]
+  "include": ["src", "../../registry"]
 }

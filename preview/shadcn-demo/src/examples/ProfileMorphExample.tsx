@@ -9,7 +9,7 @@ import {
   MessageSquare,
   Send,
 } from "lucide-react"
-import { MorphMotion } from "morph-motion"
+import { MorphCard } from "@/components/morph-motion/card"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -215,7 +215,7 @@ export function ProfileMorphExample() {
     <div className="flex flex-col items-center gap-3">
       <div className="w-full max-w-sm">
         <Card className="overflow-hidden p-6">
-          <MorphMotion.Card
+          <MorphCard
             state={expanded ? "b" : "a"}
             config={{ duration: 0.4, revealShift: 2, sharedBlur: 0 }}
           >
@@ -232,7 +232,7 @@ export function ProfileMorphExample() {
             ) : (
               <CompactLayout onOpen={() => setExpanded(true)} />
             )}
-          </MorphMotion.Card>
+          </MorphCard>
         </Card>
       </div>
       <Button

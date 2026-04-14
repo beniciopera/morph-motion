@@ -70,7 +70,7 @@ cd preview/shadcn-demo
 npm run dev
 ```
 
-The preview app resolves `morph-motion` to local source through Vite aliasing, so changes in `packages/morph-motion/src` are reflected directly while developing examples.
+The preview app resolves shadcn-style imports (`@/components/morph-motion/card` and `@/hooks/*`) to local registry sources under `registry/`, so changes in `registry/components` and `registry/hooks` are reflected directly while developing examples.
 
 ## Build the library package
 
