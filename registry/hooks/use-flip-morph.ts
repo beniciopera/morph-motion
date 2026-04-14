@@ -1,5 +1,5 @@
 "use client";
-import { useRef, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 import { useGSAP } from "@gsap/react";
 import { gsap } from "gsap";
 import { Flip } from "gsap/dist/Flip";
@@ -511,6 +511,64 @@ export function useFlipMorph(
   const layoutReserveTargetsRef = useRef<HTMLElement[]>([]);
   const wrapperSizeLockActiveRef = useRef<boolean>(false);
   const prevStateRef = useRef<MorphCardState | null>(null);
+  const recaptureBaselineRef = useRef<(() => void) | null>(null);
+  const recaptureFlipOnlyRef = useRef<(() => void) | null>(null);
+
+  // Re-capture the FLIP baseline whenever the layout can shift outside of an
+  // active transition. Flip.getState stores viewport-absolute rects, so the
+  // snapshot goes stale on ANY reflow that moves the wrapper or its shared
+  // descendants — not just when the wrapper itself resizes.
+  //
+  // Triggers we listen to:
+  //   - window resize: viewport-level reflow (scrollbars, media queries).
+  //   - ResizeObserver on wrapper: content reflow inside this card.
+  //   - ResizeObserver on document.body: page-level reflow from OTHER cards
+  //     morphing above/around this one. Their tween shifts siblings in the
+  //     document flow, moving this wrapper in viewport space without ever
+  //     resizing it, which would otherwise leave this card's baseline stale.
+  //
+  // Recapture runs synchronously so a reflow + toggle in the same event-loop
+  // turn still sees a fresh baseline.
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+    if (typeof window === "undefined") return;
+
+    // Full recapture (FLIP + leaving clones): used when THIS wrapper's
+    // own content can reflow.
+    const recaptureFull = () => {
+      if (timelineRef.current) return;
+      recaptureBaselineRef.current?.();
+    };
+
+    // Flip-only recapture: used when an UNRELATED reflow drifts this card
+    // in viewport space. Leaving clones use wrapper-relative offsets, so
+    // they stay valid — only the viewport-absolute Flip state needs refresh.
+    const recaptureFlipOnly = () => {
+      if (timelineRef.current) return;
+      recaptureFlipOnlyRef.current?.();
+    };
+
+    window.addEventListener("resize", recaptureFull);
+
+    let wrapperObserver: ResizeObserver | null = null;
+    let bodyObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      wrapperObserver = new ResizeObserver(recaptureFull);
+      wrapperObserver.observe(wrapper);
+
+      if (typeof document !== "undefined" && document.body) {
+        bodyObserver = new ResizeObserver(recaptureFlipOnly);
+        bodyObserver.observe(document.body);
+      }
+    }
+
+    return () => {
+      window.removeEventListener("resize", recaptureFull);
+      wrapperObserver?.disconnect();
+      bodyObserver?.disconnect();
+    };
+  }, [wrapperRef]);
 
   useGSAP(
     () => {
@@ -614,7 +672,11 @@ export function useFlipMorph(
         wrapperSizeLockActiveRef.current = false;
       };
 
-      const captureSnapshot = () => {
+      // Refreshes only the FLIP state (viewport-absolute rects) + wrapper
+      // height. Cheap enough to call every frame — used by the body-level
+      // ResizeObserver to keep the baseline current while OTHER cards animate
+      // and reflow this wrapper's position in the viewport.
+      const captureFlipBaseline = () => {
         const sharedEntries = getSharedEntries(wrapperRef.current);
         const elements = sharedEntries.map(({ element }) => element);
         snapshotRef.current = {
@@ -625,9 +687,19 @@ export function useFlipMorph(
           ids: collectSharedIds(sharedEntries),
           wrapperHeight: measureWrapperHeight(wrapperRef.current),
         };
+      };
 
+      // Full capture: FLIP baseline + leaving clones. createLeavingSnapshot
+      // clones reveal subtrees (expensive) but uses wrapper-relative offsets,
+      // so it only needs to run when THIS wrapper's own layout can shift —
+      // not when an unrelated card drifts us in viewport space.
+      const captureSnapshot = () => {
+        captureFlipBaseline();
         leavingSnapshotRef.current = createLeavingSnapshot(wrapperRef.current);
       };
+
+      recaptureBaselineRef.current = captureSnapshot;
+      recaptureFlipOnlyRef.current = captureFlipBaseline;
 
       // First mount — no animation, no snapshot
       if (prevStateRef.current === null) {
