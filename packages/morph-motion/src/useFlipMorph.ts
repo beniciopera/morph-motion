@@ -765,14 +765,13 @@ export function useFlipMorph(
         return captureSnapshot;
       }
 
-      applyTransitionLocks();
-
       // Third-party primitives (e.g. shadcn/Radix Progress) drive state by
       // writing inline `transform`/`filter`. Snapshot those BEFORE any gsap.set
       // touches transform/filter on shared or reveal targets, so we can
       // restore them after clearProps strips GSAP's values at the end of
-      // the timeline. Must run before the reveal gsap.set below, which uses
-      // `x` (transform) and `filter`.
+      // the timeline. Must run BEFORE applyTransitionLocks (which calls
+      // gsap.set and can prime GSAP's transform cache) and before the reveal
+      // gsap.set below, which uses `x` (transform) and `filter`.
       const preservedInlineStyles = new Map<
         HTMLElement,
         { transform: string; filter: string }
@@ -786,6 +785,8 @@ export function useFlipMorph(
       };
       sharedAfter.forEach(trackInlineStyles);
       revealTargets.forEach(trackInlineStyles);
+
+      applyTransitionLocks();
 
       if (sharedAfter.length > 0) {
         gsap.set(sharedAfter, { autoAlpha: 1 });
