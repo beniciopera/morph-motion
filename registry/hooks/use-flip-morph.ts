@@ -31,6 +31,7 @@ type SharedEntry = {
 type LeavingSnapshot = {
   container: HTMLDivElement;
   clones: HTMLElement[];
+  wrapperPositionLocked?: boolean;
 };
 
 type RevealCue = {
@@ -269,6 +270,25 @@ function computeClipInset(
   return `inset(${insetTop}px ${insetRight}px ${insetBottom}px ${insetLeft}px)`;
 }
 
+const LEAVING_CLONE_ATTRS_TO_STRIP = [
+  "data-morph-id",
+  "data-morph-all-id",
+  "data-morph-reveal",
+  "data-morph-reveal-delay",
+  "data-morph-ignore-reveal",
+  "data-morph-ignore-exit",
+  "data-flip-id",
+  MANAGED_FLIP_ATTR,
+  AUTO_SHARED_KEY_ATTR,
+];
+
+function stripLeavingCloneAttrs(root: Element): void {
+  LEAVING_CLONE_ATTRS_TO_STRIP.forEach((attr) => root.removeAttribute(attr));
+  root.querySelectorAll<HTMLElement>("*").forEach((el) => {
+    LEAVING_CLONE_ATTRS_TO_STRIP.forEach((attr) => el.removeAttribute(attr));
+  });
+}
+
 function createLeavingSnapshot(
   wrapper: HTMLDivElement | null,
 ): LeavingSnapshot | null {
@@ -286,14 +306,23 @@ function createLeavingSnapshot(
 
   if (leavingTargets.length === 0) return null;
 
+  // Leaving container mounts INSIDE the wrapper as an absolute overlay so
+  // it resizes and clips together with the wrapper's animated height.
+  // Inset-based sizing means the container tracks the wrapper's padding box
+  // automatically — as the wrapper height tweens down, clones whose rects
+  // extended past the new bounds get clipped by the container's own
+  // overflow:hidden, instead of floating outside the shrunken card.
+  const borderLeft = wrapper.clientLeft;
+  const borderTop = wrapper.clientTop;
+
   const container = document.createElement("div");
   container.setAttribute("aria-hidden", "true");
   container.setAttribute("data-morph-leaving-layer", "true");
-  container.style.position = "fixed";
-  container.style.left = `${wrapperRect.left}px`;
-  container.style.top = `${wrapperRect.top}px`;
-  container.style.width = `${wrapperRect.width}px`;
-  container.style.height = `${wrapperRect.height}px`;
+  container.style.position = "absolute";
+  container.style.top = "0";
+  container.style.left = "0";
+  container.style.right = "0";
+  container.style.bottom = "0";
   container.style.margin = "0";
   container.style.padding = "0";
   container.style.overflow = "hidden";
@@ -313,12 +342,13 @@ function createLeavingSnapshot(
     const clipInset = computeClipInset(target, wrapper, rect);
 
     const clone = target.cloneNode(true) as HTMLElement;
-    clone.removeAttribute("data-flip-id");
-    clone.removeAttribute(MANAGED_FLIP_ATTR);
-    clone.removeAttribute(AUTO_SHARED_KEY_ATTR);
+    // Clones live inside the wrapper subtree; stripping morph-query attrs
+    // (root + descendants) prevents getSharedEntries / getRevealTargets from
+    // picking them up on later queries.
+    stripLeavingCloneAttrs(clone);
     clone.style.position = "absolute";
-    clone.style.left = `${rect.left - wrapperRect.left}px`;
-    clone.style.top = `${rect.top - wrapperRect.top}px`;
+    clone.style.left = `${rect.left - wrapperRect.left - borderLeft}px`;
+    clone.style.top = `${rect.top - wrapperRect.top - borderTop}px`;
     clone.style.width = `${rect.width}px`;
     clone.style.height = `${rect.height}px`;
     clone.style.margin = "0";
@@ -489,6 +519,9 @@ export function useFlipMorph(
         if (!active) return;
 
         active.container.remove();
+        if (active.wrapperPositionLocked && wrapperRef.current) {
+          wrapperRef.current.style.position = "";
+        }
         activeLeavingSnapshotRef.current = null;
       };
 
@@ -560,7 +593,10 @@ export function useFlipMorph(
         const targets = Array.from(
           wrapperRef.current.querySelectorAll<HTMLElement>("*"),
         ).filter(
-          (el) => el.tagName !== "SCRIPT" && el.tagName !== "STYLE",
+          (el) =>
+            el.tagName !== "SCRIPT" &&
+            el.tagName !== "STYLE" &&
+            !el.closest("[data-morph-leaving-layer]"),
         );
         if (targets.length === 0) return;
 
@@ -757,8 +793,20 @@ export function useFlipMorph(
       const leavingSnapshot = leavingSnapshotRef.current;
       leavingSnapshotRef.current = createLeavingSnapshot(wrapperRef.current);
 
-      if (leavingSnapshot) {
-        document.body.appendChild(leavingSnapshot.container);
+      if (leavingSnapshot && wrapperRef.current) {
+        // Attach INSIDE the wrapper so the absolute container tracks the
+        // wrapper's animated padding box via inset:0, and clones inside get
+        // clipped by the container's overflow:hidden as the wrapper height
+        // tweens down. Fixes: exiting elements visually "escape" the card
+        // because the old fixed-viewport overlay did not shrink with it.
+        const computedPosition = window.getComputedStyle(
+          wrapperRef.current,
+        ).position;
+        if (computedPosition === "static") {
+          wrapperRef.current.style.position = "relative";
+          leavingSnapshot.wrapperPositionLocked = true;
+        }
+        wrapperRef.current.appendChild(leavingSnapshot.container);
       }
       activeLeavingSnapshotRef.current = leavingSnapshot;
 
