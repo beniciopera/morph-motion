@@ -21,7 +21,7 @@ const AVATAR_URL =
 
 function CompactLayout({ onOpen }: { onOpen: () => void }) {
   return (
-    <div className="flex items-center gap-4 p-6">
+    <div className="flex items-center gap-4">
       <img
         data-morph-id="avatar"
         src={AVATAR_URL}
@@ -73,7 +73,7 @@ function ExpandedLayout({
   onClose: () => void
 }) {
   return (
-    <div className="flex flex-col gap-5 p-6">
+    <div className="flex flex-col gap-5">
       <div className="flex items-start gap-4">
         <img
           data-morph-id="avatar"
@@ -214,7 +214,7 @@ export function ProfileMorphExample() {
   return (
     <div className="flex flex-col items-center gap-3">
       <div className="w-full max-w-sm">
-        <Card className="overflow-hidden p-0">
+        <Card className="overflow-hidden p-6">
           <MorphMotion.Card
             state={expanded ? "b" : "a"}
             config={{ duration: 0.4, revealShift: 2, sharedBlur: 0 }}

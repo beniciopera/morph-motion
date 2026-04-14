@@ -1004,34 +1004,36 @@ export function useFlipMorph(
               ? revealDelay + explicitDelay
               : revealDelay + threshold * revealWindow;
           const startAt = Math.max(0, at - revealPreRoll);
+          const hasInlineTransform =
+            !!preservedInlineStyles.get(element)?.transform;
 
-          tl.to(
-            element,
-            {
-              opacity: revealOpacityMid,
-              x: revealShiftMid,
-              filter: `blur(${revealBlurMid}px)`,
-              duration: revealDuration * 0.5,
-              ease: revealEaseStart,
-              overwrite: "auto",
-            },
-            startAt,
-          );
+          const phase1: gsap.TweenVars = {
+            opacity: revealOpacityMid,
+            filter: `blur(${revealBlurMid}px)`,
+            duration: revealDuration * 0.5,
+            ease: revealEaseStart,
+            overwrite: "auto",
+          };
+          if (!hasInlineTransform) {
+            phase1.x = revealShiftMid;
+          }
+          tl.to(element, phase1, startAt);
 
-          tl.to(
-            element,
-            {
-              opacity: 1,
-              x: 0,
-              filter: "blur(0px)",
-              duration: revealDuration * 0.5,
-              ease: revealEaseEnd,
-              overwrite: "auto",
-              pointerEvents: "auto",
-              clearProps: "filter,opacity,pointerEvents,visibility,x",
-            },
-            startAt + revealDuration * 0.5,
-          );
+          const phase2: gsap.TweenVars = {
+            opacity: 1,
+            filter: "blur(0px)",
+            duration: revealDuration * 0.5,
+            ease: revealEaseEnd,
+            overwrite: "auto",
+            pointerEvents: "auto",
+            clearProps: hasInlineTransform
+              ? "filter,opacity,pointerEvents,visibility"
+              : "filter,opacity,pointerEvents,visibility,x",
+          };
+          if (!hasInlineTransform) {
+            phase2.x = 0;
+          }
+          tl.to(element, phase2, startAt + revealDuration * 0.5);
         });
       }
 
