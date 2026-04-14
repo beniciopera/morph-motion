@@ -21,7 +21,7 @@ const AVATAR_URL =
 
 function CompactLayout({ onOpen }: { onOpen: () => void }) {
   return (
-    <div className="flex items-center gap-4 p-4" data-morph-id="profile-card">
+    <div className="flex items-center gap-4 p-6">
       <img
         data-morph-id="avatar"
         src={AVATAR_URL}
@@ -73,7 +73,7 @@ function ExpandedLayout({
   onClose: () => void
 }) {
   return (
-    <div className="flex flex-col gap-5 p-6" data-morph-id="profile-card">
+    <div className="flex flex-col gap-5 p-6">
       <div className="flex items-start gap-4">
         <img
           data-morph-id="avatar"

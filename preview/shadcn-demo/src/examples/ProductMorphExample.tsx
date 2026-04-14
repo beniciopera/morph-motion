@@ -13,12 +13,14 @@ const PRODUCT_IMAGE =
 function CompactLayout({ onOpen }: { onOpen: () => void }) {
   return (
     <div className="flex items-center gap-4 p-4">
-      <img
-        data-morph-id="product-image"
-        src={PRODUCT_IMAGE}
-        alt="Air Max sneaker"
-        className="size-20 rounded-2xl object-cover"
-      />
+      <div className="relative size-20">
+        <img
+          data-morph-id="product-image"
+          src={PRODUCT_IMAGE}
+          alt="Air Max sneaker"
+          className="absolute size-20 rounded-2xl object-cover"
+        />
+      </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <Badge
           data-morph-id="product-badge"
