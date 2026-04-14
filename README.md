@@ -4,12 +4,11 @@ Two-state card morphs for React 19 powered by GSAP Flip.
 
 This repository contains:
 
-- A reusable package, `morph-motion`, built for shared-element card transitions.
 - A local preview app with shadcn/ui examples to test and iterate on interactions.
 
 ## What morph-motion does
 
-`MorphMotion.Card` animates transitions between exactly two states (`"a"` and `"b"`) and combines:
+`MorphCard` animates transitions between exactly two states (`"a"` and `"b"`) and combines:
 
 - Shared-element FLIP for elements marked as shared.
 - Progressive reveal/hide for non-shared content.
@@ -21,8 +20,6 @@ This repository contains:
 
 ```text
 .
-├─ packages/
-│  └─ morph-motion/        # Library source and build config (npm distribution)
 ├─ registry/               # shadcn CLI registry sources
 │  ├─ hooks/
 │  └─ components/morph-motion/
@@ -72,21 +69,6 @@ npm run dev
 
 The preview app resolves shadcn-style imports (`@/components/morph-motion/card` and `@/hooks/*`) to local registry sources under `registry/`, so changes in `registry/components` and `registry/hooks` are reflected directly while developing examples.
 
-## Build the library package
-
-From root:
-
-```bash
-npm run build -w morph-motion
-```
-
-Or directly in the package:
-
-```bash
-cd packages/morph-motion
-npm run build
-```
-
 ## Install in another project
 
 ### Via shadcn CLI (recommended)
@@ -115,15 +97,7 @@ components/morph-motion/card.tsx
 
 You own the code — edit the hook, change the timing, tweak the clip-path handling.
 
-### Via npm (package mode)
-
-```bash
-npm install morph-motion gsap @gsap/react react
-```
-
 ## Basic usage
-
-If installed via shadcn CLI:
 
 ```tsx
 import { useState } from "react";
@@ -140,27 +114,6 @@ export function ProductCard() {
         <CompactLayout onOpen={() => setExpanded(true)} />
       )}
     </MorphCard>
-  );
-}
-```
-
-If installed via npm:
-
-```tsx
-import { useState } from "react";
-import { MorphMotion } from "morph-motion";
-
-export function ProductCard() {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <MorphMotion.Card state={expanded ? "b" : "a"}>
-      {expanded ? (
-        <ExpandedLayout onClose={() => setExpanded(false)} />
-      ) : (
-        <CompactLayout onOpen={() => setExpanded(true)} />
-      )}
-    </MorphMotion.Card>
   );
 }
 ```
@@ -204,7 +157,6 @@ function ExpandedLayout() {
 ## Card config
 
 ```ts
-// MorphCardConfig (shadcn) / MorphMotionCardConfig (npm) — same shape
 type MorphCardConfig = {
   duration?: number;
   ease?: string | ((progress: number) => number);
@@ -218,7 +170,7 @@ type MorphCardConfig = {
 Example:
 
 ```tsx
-<MorphMotion.Card
+<MorphCard
   state={expanded ? "b" : "a"}
   config={{
     duration: 0.55,
@@ -228,7 +180,7 @@ Example:
   }}
 >
   {expanded ? <ExpandedLayout /> : <CompactLayout />}
-</MorphMotion.Card>
+</MorphCard>
 ```
 
 ## Notes and limits
@@ -239,5 +191,4 @@ Example:
 
 ## Additional docs
 
-- Package docs: [packages/morph-motion/README.md](./packages/morph-motion/README.md)
 - Preview docs: [preview/shadcn-demo/README.md](./preview/shadcn-demo/README.md)

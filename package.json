@@ -1,12 +1,12 @@
 {
   "private": true,
   "name": "morph-motion-workspace",
-  "workspaces": ["packages/*", "playground"],
+  "workspaces": ["preview/*"],
   "scripts": {
-    "build": "npm run build -w morph-motion",
-    "dev": "npm run dev -w playground",
-    "build:lib": "npm run build -w morph-motion",
-    "dev:playground": "npm run dev -w playground",
+    "dev": "npm run dev -w shadcn-demo",
+    "build": "npm run build -w shadcn-demo",
+    "typecheck": "npm run typecheck -w shadcn-demo",
+    "lint": "npm run lint -w shadcn-demo",
     "registry:build": "npx shadcn@latest build"
   }
 }
