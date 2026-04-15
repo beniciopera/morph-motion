@@ -2,6 +2,8 @@
 
 A React 19 animation library built on GSAP, distributed as a **shadcn-style registry**. You own the source — the CLI copies each component into your project, where you are free to edit timing, ease, and DOM to your taste.
 
+> **Style-agnostic.** `morph-motion` is a motion library, not a UI kit. It ships **no CSS**, no Tailwind preset, and no dependency on shadcn/ui components. Components render plain semantic elements with zero styling so you can drop them into any design system. The shadcn registry CLI is only used as a source-delivery mechanism.
+
 `morph-motion` is growing into a small, opinionated collection of motion primitives. Today it ships **one** component:
 
 | Component     | Status | Description                                                                 |

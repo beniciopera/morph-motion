@@ -13,7 +13,7 @@ More components will land as the library grows. Each new primitive will follow t
 ## Table of contents
 
 - [Library overview](#library-overview)
-- [Installation](#installation)
+  - [Style-agnostic by design](#style-agnostic-by-design)
 - [Components](#components)
   - [MorphCard](#morphcard)
     - [When to use it](#when-to-use-it)
@@ -41,6 +41,17 @@ This gives you three things:
 3. **No version drift** — the code in your repo is the code that ships. Upgrading is a deliberate, file-level decision.
 
 Every component in `morph-motion` shares the same peer dependencies: `gsap` and `@gsap/react`. The registry CLI installs them automatically on the first `add`.
+
+### Style-agnostic by design
+
+`morph-motion` is a **motion library, not a UI kit**. It is completely style-agnostic:
+
+- **No CSS is shipped.** Components render plain semantic elements (`<div>`, `<section>`, `<img>`) with no `className`, no inline styles, and no injected stylesheets.
+- **No Tailwind or design tokens required.** You are free to use Tailwind, vanilla CSS, CSS Modules, CSS-in-JS, or anything else — `morph-motion` does not care.
+- **No dependency on shadcn/ui components.** The library is distributed *via* the shadcn registry CLI because that tooling is the best "copy source into my repo" delivery mechanism available today. It does **not** depend on shadcn/ui's component library, nor on its Tailwind preset, color tokens, or theme variables.
+- **You bring the look.** `morph-motion` only animates the layouts you write. Compose it with whatever design system you already have.
+
+In short: the library handles **motion and choreography**. The look-and-feel is always yours.
 
 ---
 
