@@ -111,50 +111,131 @@ Manual install: `npm install gsap @gsap/react`, then copy `registry/hooks/use-fl
 
 ### Quickstart
 
+The canonical example is a **product card** that expands from a compact row into a full detail view. The image, badge, title, price, and toggle button are shared across both states — they morph in place. The stars, description, and action buttons exist only in the expanded state and reveal in sequence after the shared morph.
+
 ```tsx
 import { useState } from "react";
+import { Minus, Plus, ShoppingBag, Star } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { MorphCard } from "@/components/morph-motion/card";
+
+const PRODUCT_IMAGE = "https://example.com/air-max-pulse.jpg";
 
 export function ProductCard() {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <MorphCard state={expanded ? "b" : "a"}>
-      {expanded ? (
-        <Expanded onClose={() => setExpanded(false)} />
-      ) : (
-        <Compact onOpen={() => setExpanded(true)} />
-      )}
-    </MorphCard>
+    <Card className="w-full max-w-sm overflow-hidden p-0">
+      <MorphCard
+        state={expanded ? "b" : "a"}
+        config={{ duration: 0.45, revealShift: 1.5, sharedBlur: 2 }}
+      >
+        {expanded ? (
+          <Expanded onClose={() => setExpanded(false)} />
+        ) : (
+          <Compact onOpen={() => setExpanded(true)} />
+        )}
+      </MorphCard>
+    </Card>
   );
 }
 
 function Compact({ onOpen }: { onOpen: () => void }) {
   return (
-    <button onClick={onOpen} className="flex gap-4 p-4">
-      <img data-morph-id="thumb" src="/shoe.jpg" alt="" className="size-16" />
-      <div>
-        <h3 data-morph-id="title">Air Max Pulse</h3>
-        <p data-morph-id="price">$149.00</p>
+    <div className="flex items-center gap-4 p-4">
+      <img
+        data-morph-id="product-image"
+        src={PRODUCT_IMAGE}
+        alt="Air Max Pulse"
+        className="size-20 rounded-2xl object-cover"
+      />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <Badge data-morph-id="product-badge" variant="secondary" className="w-fit">
+          New arrival
+        </Badge>
+        <h3 data-morph-id="product-title" className="truncate font-medium">
+          Air Max Pulse
+        </h3>
+        <p data-morph-id="product-price" className="text-sm font-semibold text-primary">
+          $149.00
+        </p>
       </div>
-    </button>
+      <Button
+        data-morph-id="product-toggle"
+        size="icon-sm"
+        variant="secondary"
+        onClick={onOpen}
+        aria-label="Expand product"
+      >
+        <Plus data-morph-id="product-toggle-icon" />
+      </Button>
+    </div>
   );
 }
 
 function Expanded({ onClose }: { onClose: () => void }) {
   return (
-    <div className="p-6">
-      <img data-morph-id="thumb" src="/shoe.jpg" alt="" className="w-full aspect-square" />
-      <h3 data-morph-id="title" className="text-2xl mt-4">Air Max Pulse</h3>
-      <p data-morph-id="price" className="text-xl">$149.00</p>
-      <p>Full product description that only appears in the expanded view.</p>
-      <button onClick={onClose}>Close</button>
+    <div className="flex flex-col">
+      <img
+        data-morph-id="product-image"
+        src={PRODUCT_IMAGE}
+        alt="Air Max Pulse"
+        className="h-64 w-full object-cover"
+      />
+      <div className="flex flex-col gap-4 p-6">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-col gap-2">
+            <Badge data-morph-id="product-badge" variant="secondary" className="w-fit">
+              New arrival
+            </Badge>
+            <h3 data-morph-id="product-title" className="text-2xl font-semibold tracking-tight">
+              Air Max Pulse
+            </h3>
+            <p data-morph-id="product-price" className="text-lg font-semibold text-primary">
+              $149.00
+            </p>
+          </div>
+          <Button
+            data-morph-id="product-toggle"
+            size="icon-sm"
+            variant="ghost"
+            onClick={onClose}
+            aria-label="Collapse product"
+          >
+            <Minus data-morph-id="product-toggle-icon" />
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-1 text-amber-500" data-morph-reveal-delay="0">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Star key={i} className="size-4 fill-amber-500" />
+          ))}
+          <span className="ml-2 text-xs text-muted-foreground">(128 reviews)</span>
+        </div>
+
+        <p
+          className="text-sm leading-relaxed text-muted-foreground"
+          data-morph-reveal-delay="0.05"
+        >
+          Responsive cushioning meets a breathable knit upper. Designed for all-day
+          comfort on city streets and studio floors alike.
+        </p>
+
+        <Button className="flex-1" data-morph-reveal-delay="0.18" data-icon="inline-start">
+          <ShoppingBag />
+          Add to bag
+        </Button>
+      </div>
     </div>
   );
 }
 ```
 
-The three shared elements (`thumb`, `title`, `price`) morph from their compact layout to the expanded layout. The description paragraph and close button exist only in state `"b"`, so they reveal **after** the shared morph finishes.
+Five elements are shared (`product-image`, `product-badge`, `product-title`, `product-price`, `product-toggle` — plus the nested `product-toggle-icon` that morphs from `Plus` to `Minus`). The star row, description, and "Add to bag" button exist only in state `"b"`, so they reveal **after** the shared morph finishes, staggered by the explicit `data-morph-reveal-delay` values.
+
+The full version of this example (with quantity stepper and extra actions) lives in [`preview/shadcn-demo/src/examples/ProductMorphExample.tsx`](../preview/shadcn-demo/src/examples/ProductMorphExample.tsx).
 
 ---
 
