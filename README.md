@@ -1,14 +1,20 @@
 # morph-motion
 
-Two-state card morphs for React 19 powered by GSAP Flip.
+A React 19 animation library built on GSAP, distributed as a **shadcn-style registry**. You own the source — the CLI copies each component into your project, where you are free to edit timing, ease, and DOM to your taste.
 
-This repository contains:
+`morph-motion` is growing into a small, opinionated collection of motion primitives. Today it ships **one** component:
 
-- A local preview app with shadcn/ui examples to test and iterate on interactions.
+| Component     | Status | Description                                                                 |
+| ------------- | ------ | --------------------------------------------------------------------------- |
+| `<MorphCard>` | stable | Two-state card that morphs between `"a"` and `"b"` via shared-element FLIP. |
 
-## What morph-motion does
+More primitives are on the roadmap. Every new component will follow the same contract: GSAP under the hood, a plain React surface, plain `data-*` markers, and full source ownership via the shadcn CLI.
 
-`MorphCard` animates transitions between exactly two states (`"a"` and `"b"`) and combines:
+> Full documentation lives at [`docs/index.md`](./docs/index.md). This README focuses on running the repo and building/hosting the registry.
+
+## MorphCard — what it does
+
+`<MorphCard>` animates transitions between exactly two states (`"a"` and `"b"`) and combines:
 
 - Shared-element FLIP for elements marked as shared.
 - Progressive reveal/hide for non-shared content.
@@ -109,86 +115,18 @@ export function ProductCard() {
   return (
     <MorphCard state={expanded ? "b" : "a"}>
       {expanded ? (
-        <ExpandedLayout onClose={() => setExpanded(false)} />
+        <Expanded onClose={() => setExpanded(false)} />
       ) : (
-        <CompactLayout onOpen={() => setExpanded(true)} />
+        <Compact onOpen={() => setExpanded(true)} />
       )}
     </MorphCard>
   );
 }
 ```
 
-Mark shared elements in both states using the same `data-morph-id`:
+Mark shared elements in both layouts with the same `data-morph-id` and everything else reveals in sequence. See the [full docs](./docs/index.md#morphcard) for markers, config, examples, and recommendations.
 
-```tsx
-function CompactLayout() {
-  return (
-    <div>
-      <img data-morph-id="thumb" src="..." alt="" />
-      <h3 data-morph-id="title">Air Max Pulse</h3>
-      <p data-morph-id="price">$149.00</p>
-    </div>
-  );
-}
+## Documentation
 
-function ExpandedLayout() {
-  return (
-    <div>
-      <img data-morph-id="thumb" src="..." alt="" className="w-full" />
-      <h3 data-morph-id="title">Air Max Pulse</h3>
-      <p data-morph-id="price">$149.00</p>
-      <p>Extra details shown only in expanded state.</p>
-    </div>
-  );
-}
-```
-
-## Markers reference
-
-| Marker                           | Purpose                                                   |
-| -------------------------------- | --------------------------------------------------------- |
-| `data-morph-id="..."`            | Explicit shared key for an element between state A and B. |
-| `data-morph-all-id="..."`        | Auto-generates shared keys for an entire subtree.         |
-| `data-morph-reveal`              | Forces an element into reveal animation.                  |
-| `data-morph-ignore-reveal`       | Excludes element from reveal animation.                   |
-| `data-morph-ignore-exit`         | Excludes element (and subtree) from the exit fade-out.    |
-| `data-morph-reveal-delay="0.12"` | Adds explicit reveal delay in seconds.                    |
-
-## Card config
-
-```ts
-type MorphCardConfig = {
-  duration?: number;
-  ease?: string | ((progress: number) => number);
-  revealShift?: number;
-  sharedBlur?: number;
-  onStart?: () => void;
-  onComplete?: () => void;
-};
-```
-
-Example:
-
-```tsx
-<MorphCard
-  state={expanded ? "b" : "a"}
-  config={{
-    duration: 0.55,
-    ease: "power2.inOut",
-    revealShift: 1.8,
-    sharedBlur: 2,
-  }}
->
-  {expanded ? <ExpandedLayout /> : <CompactLayout />}
-</MorphCard>
-```
-
-## Notes and limits
-
-- Shared-element scanning is limited to the card wrapper subtree.
-- Elements rendered through React portals are not included in shared scanning.
-- `data-morph-all-id` works best when subtree structure and order stay similar across both states.
-
-## Additional docs
-
-- Preview docs: [preview/shadcn-demo/README.md](./preview/shadcn-demo/README.md)
+- **[`docs/index.md`](./docs/index.md)** — full library documentation (components, API, markers, examples, recommendations, troubleshooting).
+- **[`preview/shadcn-demo/README.md`](./preview/shadcn-demo/README.md)** — preview app notes.
